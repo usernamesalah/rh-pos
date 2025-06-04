@@ -5,6 +5,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	echoSwagger "github.com/swaggo/echo-swagger"
+	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
 )
 
@@ -18,8 +19,9 @@ func (cv *CustomValidator) Validate(i interface{}) error {
 	return cv.validator.Struct(i)
 }
 
-// SetupRouter configures and returns the Echo router
+// SetupRouter configures the Echo router with all routes and middleware
 func SetupRouter(
+	cfg *config.Config,
 	authHandler *handler.AuthHandler,
 	productHandler *handler.ProductHandler,
 	transactionHandler *handler.TransactionHandler,
@@ -40,34 +42,36 @@ func SetupRouter(
 
 	// Health check
 	e.GET("/health", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{"status": "ok"})
+		return c.JSON(200, map[string]string{
+			"status": "ok",
+		})
 	})
 
-	// Auth routes (no middleware)
+	// Auth routes
 	auth := e.Group("/auth")
 	auth.POST("/login", authHandler.Login)
 
 	// Protected routes
-	api := e.Group("")
-	api.Use(authHandler.AuthMiddleware())
+	api := e.Group("/api")
+	api.Use(middleware.JWT([]byte(cfg.JWT.Secret)))
 
-	// Profile
+	// User routes
 	api.GET("/profile", authHandler.GetProfile)
 
-	// Products
+	// Product routes
 	products := api.Group("/products")
 	products.GET("", productHandler.ListProducts)
 	products.GET("/:id", productHandler.GetProduct)
 	products.PUT("/:id", productHandler.UpdateProduct)
 	products.PUT("/:id/stock", productHandler.UpdateStock)
 
-	// Transactions
+	// Transaction routes
 	transactions := api.Group("/transactions")
-	transactions.GET("", transactionHandler.ListTransactions)
 	transactions.POST("", transactionHandler.CreateTransaction)
+	transactions.GET("", transactionHandler.ListTransactions)
 	transactions.GET("/:id", transactionHandler.GetTransaction)
 
-	// Reports
+	// Report routes
 	reports := api.Group("/reports")
 	reports.GET("", reportHandler.GetSalesReport)
 

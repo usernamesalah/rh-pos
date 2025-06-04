@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"gorm.io/gorm"
 )
 
 type AuthHandler struct {
@@ -48,37 +49,33 @@ type ProfileResponse struct {
 // @Accept json
 // @Produce json
 // @Param request body LoginRequest true "Login credentials"
-// @Success 200 {object} LoginResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 401 {object} Response
 // @Router /auth/login [post]
 func (h *AuthHandler) Login(c echo.Context) error {
-	ctx := c.Request().Context()
-
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
-		h.logger.WarnContext(ctx, "invalid request body", "error", err)
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 	}
 
-	if err := c.Validate(req); err != nil {
-		h.logger.WarnContext(ctx, "validation failed", "error", err)
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Validation failed"})
-	}
-
-	token, user, err := h.authService.Login(ctx, req.Username, req.Password)
+	token, user, err := h.authService.Login(c.Request().Context(), req.Username, req.Password)
 	if err != nil {
-		h.logger.WarnContext(ctx, "login failed", "error", err, "username", req.Username)
-		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Invalid credentials"})
+		return ErrorResponse(c, http.StatusUnauthorized, "Invalid credentials")
 	}
 
-	response := LoginResponse{
-		Token:    token,
-		Username: user.Username,
-		Role:     user.Role,
-	}
+	response := WithHashID(
+		user.ID,
+		user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"token":    token,
+			"username": user.Username,
+			"role":     user.Role,
+		},
+	)
 
-	return c.JSON(http.StatusOK, response)
+	return SuccessResponse(c, http.StatusOK, "Login successful", response)
 }
 
 // GetProfile handles getting user profile
@@ -87,21 +84,27 @@ func (h *AuthHandler) Login(c echo.Context) error {
 // @Tags Authentication
 // @Produce json
 // @Security bearerAuth
-// @Success 200 {object} ProfileResponse
-// @Failure 401 {object} ErrorResponse
-// @Router /profile [get]
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 401 {object} Response
+// @Router /api/profile [get]
 func (h *AuthHandler) GetProfile(c echo.Context) error {
-	user := GetUserFromContext(c)
-	if user == nil {
-		return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Unauthorized"})
+	userID := c.Get("user_id").(uint)
+	user, err := h.authService.GetUserByID(c.Request().Context(), userID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return ErrorResponse(c, http.StatusNotFound, "User not found")
+		}
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get profile")
 	}
 
-	response := ProfileResponse{
-		Username: user.Username,
-		Role:     user.Role,
-	}
+	response := WithHashID(
+		user.ID,
+		user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		user,
+	)
 
-	return c.JSON(http.StatusOK, response)
+	return SuccessResponse(c, http.StatusOK, "Profile retrieved successfully", response)
 }
 
 // AuthMiddleware validates JWT tokens
@@ -110,18 +113,18 @@ func (h *AuthHandler) AuthMiddleware() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
-				return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Authorization header required"})
+				return ErrorResponse(c, http.StatusUnauthorized, "Authorization header required")
 			}
 
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 			if tokenString == authHeader {
-				return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Bearer token required"})
+				return ErrorResponse(c, http.StatusUnauthorized, "Bearer token required")
 			}
 
 			user, err := h.authService.ValidateToken(tokenString)
 			if err != nil {
 				h.logger.WarnContext(c.Request().Context(), "invalid token", "error", err)
-				return c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Invalid token"})
+				return ErrorResponse(c, http.StatusUnauthorized, "Invalid token")
 			}
 
 			// Store user in context

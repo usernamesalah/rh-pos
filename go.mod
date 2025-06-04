@@ -9,6 +9,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.12.0
+	github.com/speps/go-hashids/v2 v2.0.1
 	github.com/swaggo/echo-swagger v1.4.1
 	golang.org/x/crypto v0.23.0
 	gorm.io/driver/mysql v1.5.6

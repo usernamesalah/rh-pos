@@ -71,3 +71,5 @@ coverage.html
 # Build artifacts
 dist/
 build/ 
+
+vendor/

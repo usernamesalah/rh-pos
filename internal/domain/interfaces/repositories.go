@@ -10,6 +10,7 @@ import (
 // UserRepository defines the interface for user data operations
 type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*entities.User, error)
+	GetByID(ctx context.Context, id uint) (*entities.User, error)
 	Create(ctx context.Context, user *entities.User) error
 }
 

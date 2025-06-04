@@ -41,31 +41,54 @@ func (h *ReportHandler) GetSalesReport(c echo.Context) error {
 	endDateStr := c.QueryParam("end_date")
 
 	if startDateStr == "" || endDateStr == "" {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "start_date and end_date are required"})
+		return ErrorResponse(c, http.StatusBadRequest, "start_date and end_date are required")
 	}
 
 	startDate, err := time.Parse("2006-01-02", startDateStr)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid start_date format, use YYYY-MM-DD"})
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid start_date format, use YYYY-MM-DD")
 	}
 
 	endDate, err := time.Parse("2006-01-02", endDateStr)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid end_date format, use YYYY-MM-DD"})
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid end_date format, use YYYY-MM-DD")
 	}
 
 	// Set end date to end of day
 	endDate = endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 
 	if startDate.After(endDate) {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "start_date must be before or equal to end_date"})
+		return ErrorResponse(c, http.StatusBadRequest, "start_date must be before or equal to end_date")
 	}
 
 	report, err := h.reportService.GetSalesReport(ctx, startDate, endDate)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get sales report", "error", err)
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to get sales report"})
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get sales report")
 	}
 
-	return c.JSON(http.StatusOK, report)
+	// Convert details to HashIDResponse
+	details := make([]HashIDResponse, len(report.Details))
+	for i, detail := range report.Details {
+		details[i] = WithHashID(
+			detail.ID,
+			"", // No created_at for report details
+			"", // No updated_at for report details
+			map[string]interface{}{
+				"product_id":   detail.ProductID,
+				"product_name": detail.ProductName,
+				"total":        detail.Total,
+				"total_price":  detail.TotalPrice,
+			},
+		)
+	}
+
+	response := map[string]interface{}{
+		"total_revenue":       report.TotalRevenue,
+		"items_sold":          report.ItemsSold,
+		"average_transaction": report.AverageTransaction,
+		"details":             details,
+	}
+
+	return SuccessResponse(c, http.StatusOK, "Sales report retrieved successfully", response)
 }

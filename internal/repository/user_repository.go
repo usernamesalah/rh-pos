@@ -39,6 +39,22 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*e
 	return &user, nil
 }
 
+// GetByID retrieves a user by ID
+func (r *userRepository) GetByID(ctx context.Context, id uint) (*entities.User, error) {
+	r.logger.InfoContext(ctx, "getting user by ID", "id", id)
+
+	var user entities.User
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("user not found: %w", err)
+		}
+		r.logger.ErrorContext(ctx, "failed to get user", "error", err, "id", id)
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
 // Create creates a new user
 func (r *userRepository) Create(ctx context.Context, user *entities.User) error {
 	r.logger.InfoContext(ctx, "creating user", "username", user.Username)

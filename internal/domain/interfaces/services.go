@@ -12,6 +12,7 @@ type AuthService interface {
 	Login(ctx context.Context, username, password string) (string, *entities.User, error)
 	ValidateToken(tokenString string) (*entities.User, error)
 	HashPassword(password string) (string, error)
+	GetUserByID(ctx context.Context, id uint) (*entities.User, error)
 }
 
 // ProductService defines product business operations

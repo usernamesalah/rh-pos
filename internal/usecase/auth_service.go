@@ -95,3 +95,14 @@ func (s *authService) HashPassword(password string) (string, error) {
 	}
 	return string(hashedPassword), nil
 }
+
+// GetUserByID retrieves a user by their ID
+func (s *authService) GetUserByID(ctx context.Context, id uint) (*entities.User, error) {
+	s.logger.InfoContext(ctx, "getting user by ID", "id", id)
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get user by ID", "error", err, "id", id)
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	return user, nil
+}

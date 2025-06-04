@@ -22,6 +22,7 @@ import (
 // @description API for Point of Sale System with user management, product management, and sales reporting
 // @host localhost:8080
 // @BasePath /
+// @schemes http https
 // @securityDefinitions.apikey bearerAuth
 // @in header
 // @name Authorization
@@ -77,7 +78,7 @@ func main() {
 	reportHandler := handler.NewReportHandler(reportService, logger)
 
 	// Setup router
-	e := server.SetupRouter(authHandler, productHandler, transactionHandler, reportHandler)
+	e := server.SetupRouter(cfg, authHandler, productHandler, transactionHandler, reportHandler)
 
 	// Start server
 	serverAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

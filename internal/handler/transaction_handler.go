@@ -6,8 +6,9 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
-	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
+	"gorm.io/gorm"
 )
 
 type TransactionHandler struct {
@@ -21,14 +22,6 @@ func NewTransactionHandler(transactionService interfaces.TransactionService, log
 		transactionService: transactionService,
 		logger:             logger,
 	}
-}
-
-// TransactionListResponse represents the paginated transaction list response
-type TransactionListResponse struct {
-	Items []entities.Transaction `json:"items"`
-	Total int64                  `json:"total"`
-	Page  int                    `json:"page"`
-	Limit int                    `json:"limit"`
 }
 
 // CreateTransactionRequest represents the create transaction request
@@ -54,9 +47,9 @@ type TransactionItemRequest struct {
 // @Produce json
 // @Security bearerAuth
 // @Param request body CreateTransactionRequest true "Create transaction request"
-// @Success 201 {object} entities.Transaction
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
+// @Success 201 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
 // @Router /transactions [post]
 func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -64,12 +57,12 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 	var req CreateTransactionRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.WarnContext(ctx, "invalid request body", "error", err)
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 	}
 
 	if err := c.Validate(req); err != nil {
 		h.logger.WarnContext(ctx, "validation failed", "error", err)
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Validation failed"})
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
 	}
 
 	// Convert to service request
@@ -91,10 +84,41 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 	transaction, err := h.transactionService.CreateTransaction(ctx, serviceReq)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to create transaction", "error", err)
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to create transaction"})
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create transaction")
 	}
 
-	return c.JSON(http.StatusCreated, transaction)
+	// Convert items to flattened structure
+	items := make([]map[string]interface{}, len(transaction.Items))
+	for i, item := range transaction.Items {
+		items[i] = map[string]interface{}{
+			"product_id": item.ProductID,
+			"quantity":   item.Quantity,
+			"price":      item.Price,
+			"product": map[string]interface{}{
+				"name":        item.Product.Name,
+				"sku":         item.Product.SKU,
+				"image":       item.Product.Image,
+				"harga_modal": item.Product.HargaModal,
+				"harga_jual":  item.Product.HargaJual,
+				"stock":       item.Product.Stock,
+			},
+		}
+	}
+
+	response := WithHashID(
+		transaction.ID,
+		transaction.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		transaction.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"items":          items,
+			"user":           transaction.User,
+			"payment_method": transaction.PaymentMethod,
+			"discount":       transaction.Discount,
+			"total_price":    transaction.TotalPrice,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusCreated, "Transaction created successfully", response)
 }
 
 // ListTransactions handles listing transactions with pagination
@@ -105,8 +129,8 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 // @Security bearerAuth
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(10)
-// @Success 200 {object} TransactionListResponse
-// @Failure 401 {object} ErrorResponse
+// @Success 200 {object} Response{data=[]HashIDResponse}
+// @Failure 401 {object} Response
 // @Router /transactions [get]
 func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -124,17 +148,45 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 	transactions, total, err := h.transactionService.ListTransactions(ctx, page, limit)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to list transactions", "error", err)
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to list transactions"})
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to list transactions")
 	}
 
-	response := TransactionListResponse{
-		Items: transactions,
-		Total: total,
-		Page:  page,
-		Limit: limit,
+	// Convert transactions to HashIDResponse
+	items := make([]HashIDResponse, len(transactions))
+	for i, t := range transactions {
+		// Convert items to flattened structure
+		transactionItems := make([]map[string]interface{}, len(t.Items))
+		for j, item := range t.Items {
+			transactionItems[j] = map[string]interface{}{
+				"product_id": item.ProductID,
+				"quantity":   item.Quantity,
+				"price":      item.Price,
+				"product": map[string]interface{}{
+					"name":        item.Product.Name,
+					"sku":         item.Product.SKU,
+					"image":       item.Product.Image,
+					"harga_modal": item.Product.HargaModal,
+					"harga_jual":  item.Product.HargaJual,
+					"stock":       item.Product.Stock,
+				},
+			}
+		}
+
+		items[i] = WithHashID(
+			t.ID,
+			t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			map[string]interface{}{
+				"items":          transactionItems,
+				"user":           t.User,
+				"payment_method": t.PaymentMethod,
+				"discount":       t.Discount,
+				"total_price":    t.TotalPrice,
+			},
+		)
 	}
 
-	return c.JSON(http.StatusOK, response)
+	return SuccessPaginatedResponse(c, http.StatusOK, "Transactions retrieved successfully", items, total, page, limit)
 }
 
 // GetTransaction handles getting a single transaction by ID
@@ -143,24 +195,63 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 // @Tags Transactions
 // @Produce json
 // @Security bearerAuth
-// @Param id path int true "Transaction ID"
-// @Success 200 {object} entities.Transaction
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
+// @Param id path string true "Transaction ID"
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
 // @Router /transactions/{id} [get]
 func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	// Get hashed ID from URL
+	hashedID := c.Param("id")
+
+	// Decode hashed ID to get the actual ID
+	id, err := hash.DecodeHashID(hashedID)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid transaction ID"})
+		h.logger.WarnContext(ctx, "invalid transaction ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid transaction ID format")
 	}
 
-	transaction, err := h.transactionService.GetTransaction(ctx, uint(id))
+	transaction, err := h.transactionService.GetTransaction(ctx, id)
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return ErrorResponse(c, http.StatusNotFound, "Transaction not found")
+		}
 		h.logger.ErrorContext(ctx, "failed to get transaction", "error", err, "id", id)
-		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Transaction not found"})
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get transaction")
 	}
 
-	return c.JSON(http.StatusOK, transaction)
+	// Convert items to flattened structure
+	items := make([]map[string]interface{}, len(transaction.Items))
+	for i, item := range transaction.Items {
+		items[i] = map[string]interface{}{
+			"product_id": item.ProductID,
+			"quantity":   item.Quantity,
+			"price":      item.Price,
+			"product": map[string]interface{}{
+				"name":        item.Product.Name,
+				"sku":         item.Product.SKU,
+				"image":       item.Product.Image,
+				"harga_modal": item.Product.HargaModal,
+				"harga_jual":  item.Product.HargaJual,
+				"stock":       item.Product.Stock,
+			},
+		}
+	}
+
+	response := WithHashID(
+		transaction.ID,
+		transaction.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		transaction.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"items":          items,
+			"user":           transaction.User,
+			"payment_method": transaction.PaymentMethod,
+			"discount":       transaction.Discount,
+			"total_price":    transaction.TotalPrice,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusOK, "Transaction retrieved successfully", response)
 }
