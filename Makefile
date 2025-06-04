@@ -1,71 +1,65 @@
-.PHONY: help run build test clean docker-up docker-down migrate swagger-gen seed
+.PHONY: dev build prod down clean test migrate seed help
 
 # Default target
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+.DEFAULT_GOAL := help
 
-# Development
-run: ## Run the application with hot reload using Air
-	docker compose build
-	docker compose up
+# Variables
+DOCKER_COMPOSE_DEV = docker-compose
+DOCKER_COMPOSE_PROD = docker-compose -f docker-compose.prod.yml
 
+# Development commands
+dev: ## Start development environment
+	$(DOCKER_COMPOSE_DEV) up --build
+
+dev-down: ## Stop development environment
+	$(DOCKER_COMPOSE_DEV) down
+
+dev-logs: ## View development logs
+	$(DOCKER_COMPOSE_DEV) logs -f
+
+# Production commands
+prod: ## Start production environment
+	$(DOCKER_COMPOSE_PROD) up -d
+
+prod-down: ## Stop production environment
+	$(DOCKER_COMPOSE_PROD) down
+
+prod-logs: ## View production logs
+	$(DOCKER_COMPOSE_PROD) logs -f
+
+# Build commands
+build: ## Build the application
+	go build -o bin/main cmd/main.go
+
+build-prod: ## Build production Docker image
+	$(DOCKER_COMPOSE_PROD) build
+
+# Database commands
+migrate: ## Run database migrations
+	go run cmd/seed/main.go migrate
+
+seed: ## Seed the database with initial data
+	go run cmd/seed/main.go seed
+
+# Testing commands
 test: ## Run tests
 	go test -v ./...
 
 test-coverage: ## Run tests with coverage
-	go test -v -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
+	go test -v -cover ./...
 
-clean: ## Clean build artifacts
-	rm -rf bin/ tmp/ coverage.out coverage.html
+# Utility commands
+clean: ## Clean up temporary files and Docker resources
+	rm -rf tmp/
+	rm -rf bin/
+	docker system prune -f
 
-# Dependencies
-deps: ## Download dependencies
-	go mod download
-	go mod tidy
-
-# Database
-migrate-up: ## Run database migrations
-	goose -dir migrations mysql "$(DB_DSN)" up
-
-migrate-down: ## Rollback database migrations
-	goose -dir migrations mysql "$(DB_DSN)" down
-
-migrate-create: ## Create new migration (usage: make migrate-create NAME=migration_name)
-	goose -dir migrations create $(NAME) sql
-
-seed: ## Seed database with initial data
-	go run cmd/seed/main.go
-
-# Swagger
-swagger-gen: ## Generate Swagger documentation
-	swag init -g cmd/main.go -o docs
-
-# Linting
-lint: ## Run golangci-lint
+lint: ## Run linter
 	golangci-lint run
 
-# Format
-fmt: ## Format Go code
-	go fmt ./...
-
-# Setup
-setup: deps ## Setup development environment
-	@echo "Installing development tools..."
-	go install github.com/cosmtrek/air@latest
-	go install github.com/pressly/goose/v3/cmd/goose@latest
-	go install github.com/swaggo/swag/cmd/swag@latest
-	@echo "Development environment setup complete!"
-
-# Local development with MySQL
-dev-up: ## Start local development (MySQL + App)
-	docker-compose up mysql -d
-	@echo "Waiting for MySQL to be ready..."
-	@sleep 10
-	make run
-
-dev-down: ## Stop local development
-	docker-compose down 
+# Help command
+help: ## Display this help message
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST) 

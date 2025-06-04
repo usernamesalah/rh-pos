@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     ports:
       - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
     env_file:
@@ -17,7 +19,6 @@ services:
       - /app/tmp
       - /app/vendor
     working_dir: /app
-    command: air -c air.toml
     depends_on:
       mysql:
         condition: service_healthy
