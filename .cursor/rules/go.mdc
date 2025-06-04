@@ -1,0 +1,80 @@
+---
+description: Best practices for Go 1.24 applications
+globs: **/*.go
+alwaysApply: false
+---
+# Go Coding Guidelines
+
+## API Design
+- Follow RESTful API design principles
+- Implement input validation for endpoints
+- Use appropriate status codes for responses
+
+## Logging & Error Handling
+- Implement proper structured logging with `slog` package
+- If a call needs `context.Context`, always pass it as the first argument (named `ctx`)
+- Make logger the first or second argument after `context.Context`
+- Wrap errors with context using `fmt.Errorf("<context>: %w", err)`
+- Return errors, do not panic
+- Never write naked returns
+- Avoid using `else` where possible
+
+## Concurrency
+- Ensure every goroutine will exit
+- Do not use concurrency unless instructed or necessary
+- Prefer `errgroup.Group` over `sync.WaitGroup`
+- Try not to use more than one sync primitive at a time
+- Ensure channels are initialized properly, using buffered channels where appropriate
+- Ensure channels are closed only once and when closed there are no more senders
+- Avoid deadlocks at all costs
+
+## Code Style
+- Preallocate slices when you know the size
+- Never store contexts in structs
+- Avoid global state unless absolutely necessary
+- Keep variable names short but descriptive
+- Use consistent abbreviations (e.g. `ctx` for context)
+- Keep functions short, ideally 20–30 lines max
+- Use `any` instead of `interface{}`
+- Prefer generics over `any`
+- Avoid magic numbers or strings; use named constants
+- Use `iota` for enums where applicable
+- Use `for _, item := range` over manual indexing when possible
+- Favor composition over inheritance or deep struct embedding
+- Do not use `init()`
+- Make the zero value useful
+
+## Project Structure
+- Use go modules for dependency management
+- Never create packages named "util", "utils", "shared", "common", "helpers", etc
+- Keep package names short, lowercase, and descriptive
+- Define interfaces where they're used, not where they're implemented
+- Keep interfaces small (1-3 methods)
+- Follow accept interfaces, return structs principle
+
+## Library Usage
+- Use v2 versions of standard packages such as `math/v2`
+- Prefer stdlib or x packages to third-party packages unless the stdlib does not implement what's needed
+
+## Performance
+- Use `sync.Pool` when repeatedly allocating large objects
+- Use `strings.Builder` for building strings in loops
+- Avoid unnecessary memory allocations (e.g. using `append` in tight loops)
+- Profile before optimizing: use `pprof` or similar tools
+
+## Security
+- Never log sensitive data (e.g. tokens, passwords, user secrets)
+- Validate both client and server-side inputs
+- Use HTTPS and secure headers when exposing services
+- Handle time-based comparisons using `subtle.ConstantTimeCompare` for secrets
+
+## Operational
+- Use `context.WithTimeout` for external calls (e.g., DB, HTTP)
+- Emit metrics for key operations (latency, error rate, etc.)
+- Gracefully shut down servers on SIGINT/SIGTERM
+- Prefer structured config loading via `env`, `flag`, or config files
+
+## Misc
+- Avoid `init()` functions; use explicit initialization
+- Make the zero value of types meaningful and usable by default
+
