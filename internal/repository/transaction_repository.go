@@ -103,3 +103,23 @@ func (r *transactionRepository) GetReportData(ctx context.Context, startDate, en
 
 	return reportDetails, nil
 }
+
+// Delete deletes a transaction
+func (r *transactionRepository) Delete(ctx context.Context, id uint) error {
+	r.logger.InfoContext(ctx, "deleting transaction", "id", id)
+	if err := r.db.WithContext(ctx).Delete(&entities.Transaction{}, id).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to delete transaction", "error", err, "id", id)
+		return fmt.Errorf("failed to delete transaction: %w", err)
+	}
+	return nil
+}
+
+// Update updates a transaction
+func (r *transactionRepository) Update(ctx context.Context, transaction *entities.Transaction) error {
+	r.logger.InfoContext(ctx, "updating transaction", "id", transaction.ID)
+	if err := r.db.WithContext(ctx).Save(transaction).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to update transaction", "error", err, "id", transaction.ID)
+		return fmt.Errorf("failed to update transaction: %w", err)
+	}
+	return nil
+}

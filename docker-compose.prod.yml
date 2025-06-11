@@ -1,18 +1,8 @@
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+  rh-pos-be:
+    image: ghcr.io/usernamesalah/rh-pos:latest
     env_file:
       - .env
-    environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${SERVER_PORT:-8080}/health"]
@@ -20,17 +10,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    deploy:
-      replicas: 2
-      update_config:
-        parallelism: 1
-        delay: 10s
-      restart_policy:
-        condition: on-failure
-        max_attempts: 3
     networks:
-      - pos-network
+      - usernamesalah
 
 networks:
-  pos-network:
-    driver: bridge 
+  usernamesalah:
+    external: true

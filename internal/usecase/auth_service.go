@@ -106,3 +106,23 @@ func (s *authService) GetUserByID(ctx context.Context, id uint) (*entities.User,
 	}
 	return user, nil
 }
+
+// CreateUser creates a new user
+func (s *authService) CreateUser(ctx context.Context, user *entities.User) error {
+	s.logger.InfoContext(ctx, "creating user", "username", user.Username)
+
+	// Hash password
+	hashedPassword, err := s.HashPassword(user.Password)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+	user.Password = hashedPassword
+
+	// Create user
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		s.logger.ErrorContext(ctx, "failed to create user", "error", err, "username", user.Username)
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return nil
+}

@@ -14,6 +14,7 @@ type Config struct {
 	Database DatabaseConfig
 	JWT      JWTConfig
 	Logger   LoggerConfig
+	Admin    AdminConfig
 }
 
 // ServerConfig holds server configuration
@@ -42,6 +43,12 @@ type LoggerConfig struct {
 	Level string
 }
 
+// AdminConfig holds admin configuration
+type AdminConfig struct {
+	Username string
+	Password string
+}
+
 // Load loads configuration from .env file and environment variables
 func Load() (*Config, error) {
 	// Load .env file if it exists (ignore error if file doesn't exist)
@@ -68,6 +75,10 @@ func Load() (*Config, error) {
 		Logger: LoggerConfig{
 			Level: getEnv("LOG_LEVEL", "info"),
 		},
+		Admin: AdminConfig{
+			Username: getEnv("ADMIN_USERNAME", ""),
+			Password: getEnv("ADMIN_PASSWORD", ""),
+		},
 	}
 
 	// Validate required fields
@@ -77,6 +88,10 @@ func Load() (*Config, error) {
 
 	if config.Database.Name == "" {
 		return nil, fmt.Errorf("DB_NAME is required")
+	}
+
+	if config.Admin.Username == "" || config.Admin.Password == "" {
+		return nil, fmt.Errorf("ADMIN_USERNAME and ADMIN_PASSWORD are required")
 	}
 
 	// Construct DSN

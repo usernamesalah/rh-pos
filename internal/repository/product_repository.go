@@ -23,6 +23,40 @@ func NewProductRepository(db *gorm.DB, logger *slog.Logger) interfaces.ProductRe
 	}
 }
 
+// Create creates a new product
+func (r *productRepository) Create(ctx context.Context, product *entities.Product) error {
+	r.logger.InfoContext(ctx, "creating product", "sku", product.SKU)
+	if err := r.db.WithContext(ctx).Create(product).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to create product", "error", err)
+		return fmt.Errorf("failed to create product: %w", err)
+	}
+	return nil
+}
+
+// Delete deletes a product
+func (r *productRepository) Delete(ctx context.Context, id uint) error {
+	r.logger.InfoContext(ctx, "deleting product", "id", id)
+	if err := r.db.WithContext(ctx).Delete(&entities.Product{}, id).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to delete product", "error", err, "id", id)
+		return fmt.Errorf("failed to delete product: %w", err)
+	}
+	return nil
+}
+
+// GetBySKU retrieves a product by SKU
+func (r *productRepository) GetBySKU(ctx context.Context, sku string) (*entities.Product, error) {
+	r.logger.InfoContext(ctx, "getting product by SKU", "sku", sku)
+	var product entities.Product
+	if err := r.db.WithContext(ctx).Where("sku = ?", sku).First(&product).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("product not found: %w", err)
+		}
+		r.logger.ErrorContext(ctx, "failed to get product by SKU", "error", err, "sku", sku)
+		return nil, fmt.Errorf("failed to get product by SKU: %w", err)
+	}
+	return &product, nil
+}
+
 // GetByID retrieves a product by ID
 func (r *productRepository) GetByID(ctx context.Context, id uint) (*entities.Product, error) {
 	r.logger.InfoContext(ctx, "getting product by ID", "id", id)

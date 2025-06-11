@@ -64,21 +64,24 @@ func main() {
 	userRepo := repository.NewUserRepository(db, logger)
 	productRepo := repository.NewProductRepository(db, logger)
 	transactionRepo := repository.NewTransactionRepository(db, logger)
+	tenantRepo := repository.NewTenantRepository(db, logger)
 
-	// Initialize services (pass db to transaction service for transaction support)
+	// Initialize services
 	authService := usecase.NewAuthService(userRepo, cfg.JWT.Secret, logger)
 	productService := usecase.NewProductService(productRepo, logger)
 	transactionService := usecase.NewTransactionService(transactionRepo, productRepo, db, logger)
 	reportService := usecase.NewReportService(transactionRepo, logger)
+	tenantService := usecase.NewTenantService(tenantRepo, logger)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService, logger)
 	productHandler := handler.NewProductHandler(productService, logger)
 	transactionHandler := handler.NewTransactionHandler(transactionService, logger)
 	reportHandler := handler.NewReportHandler(reportService, logger)
+	adminHandler := handler.NewAdminHandler(tenantService, authService)
 
 	// Setup router
-	e := server.SetupRouter(cfg, authHandler, productHandler, transactionHandler, reportHandler)
+	e := server.SetupRouter(cfg, authHandler, productHandler, transactionHandler, reportHandler, adminHandler)
 
 	// Start server
 	serverAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

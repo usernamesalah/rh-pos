@@ -66,3 +66,36 @@ func (r *userRepository) Create(ctx context.Context, user *entities.User) error 
 
 	return nil
 }
+
+// Delete deletes a user
+func (r *userRepository) Delete(ctx context.Context, id uint) error {
+	r.logger.InfoContext(ctx, "deleting user", "id", id)
+	if err := r.db.WithContext(ctx).Delete(&entities.User{}, id).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to delete user", "error", err, "id", id)
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
+}
+
+// List retrieves all users
+func (r *userRepository) List(ctx context.Context) ([]*entities.User, error) {
+	r.logger.InfoContext(ctx, "listing users")
+
+	var users []*entities.User
+	if err := r.db.WithContext(ctx).Find(&users).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to list users", "error", err)
+		return nil, fmt.Errorf("failed to list users: %w", err)
+	}
+
+	return users, nil
+}
+
+// Update updates a user
+func (r *userRepository) Update(ctx context.Context, user *entities.User) error {
+	r.logger.InfoContext(ctx, "updating user", "id", user.ID)
+	if err := r.db.WithContext(ctx).Save(user).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to update user", "error", err, "id", user.ID)
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}

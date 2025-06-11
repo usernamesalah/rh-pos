@@ -45,6 +45,7 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 			User:          req.User,
 			PaymentMethod: req.PaymentMethod,
 			Discount:      req.Discount,
+			Notes:         req.Notes,
 			Items:         make([]entities.TransactionItem, 0, len(req.Items)),
 		}
 

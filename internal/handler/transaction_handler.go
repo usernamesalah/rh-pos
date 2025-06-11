@@ -31,6 +31,7 @@ type CreateTransactionRequest struct {
 	PaymentMethod string                   `json:"payment_method" validate:"required"`
 	Discount      float64                  `json:"discount"`
 	TotalPrice    float64                  `json:"total_price" validate:"required,min=0"`
+	Notes         string                   `json:"notes"`
 }
 
 // TransactionItemRequest represents an item in transaction request
@@ -71,6 +72,7 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		PaymentMethod: req.PaymentMethod,
 		Discount:      req.Discount,
 		TotalPrice:    req.TotalPrice,
+		Notes:         req.Notes,
 		Items:         make([]interfaces.TransactionItemRequest, len(req.Items)),
 	}
 
@@ -115,6 +117,7 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 			"payment_method": transaction.PaymentMethod,
 			"discount":       transaction.Discount,
 			"total_price":    transaction.TotalPrice,
+			"notes":          transaction.Notes,
 		},
 	)
 
@@ -182,6 +185,7 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 				"payment_method": t.PaymentMethod,
 				"discount":       t.Discount,
 				"total_price":    t.TotalPrice,
+				"notes":          t.Notes,
 			},
 		)
 	}
@@ -250,6 +254,7 @@ func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 			"payment_method": transaction.PaymentMethod,
 			"discount":       transaction.Discount,
 			"total_price":    transaction.TotalPrice,
+			"notes":          transaction.Notes,
 		},
 	)
 

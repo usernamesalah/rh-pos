@@ -13,6 +13,8 @@ type Product struct {
 	HargaModal float64   `json:"harga_modal" gorm:"not null"`
 	HargaJual  float64   `json:"harga_jual" gorm:"not null"`
 	Stock      int       `json:"stock" gorm:"not null;default:0"`
+	TenantID   *uint     `json:"tenant_id" gorm:"index"`
+	Tenant     *Tenant   `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

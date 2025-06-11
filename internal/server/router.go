@@ -2,11 +2,13 @@ package server
 
 import (
 	"github.com/go-playground/validator/v10"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echoMiddleware "github.com/labstack/echo/v4/middleware"
 	echoSwagger "github.com/swaggo/echo-swagger"
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
+	adminMiddleware "github.com/usernamesalah/rh-pos/internal/pkg/middleware"
 )
 
 // CustomValidator wraps the validator
@@ -26,6 +28,7 @@ func SetupRouter(
 	productHandler *handler.ProductHandler,
 	transactionHandler *handler.TransactionHandler,
 	reportHandler *handler.ReportHandler,
+	adminHandler *handler.AdminHandler,
 ) *echo.Echo {
 	e := echo.New()
 
@@ -33,9 +36,9 @@ func SetupRouter(
 	e.Validator = &CustomValidator{validator: validator.New()}
 
 	// Middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+	e.Use(echoMiddleware.Logger())
+	e.Use(echoMiddleware.Recover())
+	e.Use(echoMiddleware.CORS())
 
 	// Swagger documentation
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
@@ -51,9 +54,17 @@ func SetupRouter(
 	auth := e.Group("/auth")
 	auth.POST("/login", authHandler.Login)
 
+	// Admin routes (protected by Basic Auth)
+	admin := e.Group("/admin")
+	admin.Use(adminMiddleware.AdminAuth(cfg))
+	admin.POST("/tenants", adminHandler.CreateTenant)
+	admin.POST("/users", adminHandler.CreateUser)
+
 	// Protected routes
 	api := e.Group("/api")
-	api.Use(middleware.JWT([]byte(cfg.JWT.Secret)))
+	api.Use(echojwt.WithConfig(echojwt.Config{
+		SigningKey: []byte(cfg.JWT.Secret),
+	}))
 
 	// User routes
 	api.GET("/profile", authHandler.GetProfile)

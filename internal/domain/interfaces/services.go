@@ -13,6 +13,7 @@ type AuthService interface {
 	ValidateToken(tokenString string) (*entities.User, error)
 	HashPassword(password string) (string, error)
 	GetUserByID(ctx context.Context, id uint) (*entities.User, error)
+	CreateUser(ctx context.Context, user *entities.User) error
 }
 
 // ProductService defines product business operations
@@ -35,6 +36,15 @@ type ReportService interface {
 	GetSalesReport(ctx context.Context, startDate, endDate time.Time) (*ReportResponse, error)
 }
 
+// TenantService defines tenant business operations
+type TenantService interface {
+	CreateTenant(ctx context.Context, tenant *entities.Tenant) error
+	GetTenant(ctx context.Context, id uint) (*entities.Tenant, error)
+	ListTenants(ctx context.Context) ([]*entities.Tenant, error)
+	UpdateTenant(ctx context.Context, tenant *entities.Tenant) error
+	DeleteTenant(ctx context.Context, id uint) error
+}
+
 // CreateTransactionRequest represents the request to create a transaction
 type CreateTransactionRequest struct {
 	Items         []TransactionItemRequest `json:"items"`
@@ -42,6 +52,7 @@ type CreateTransactionRequest struct {
 	PaymentMethod string                   `json:"payment_method"`
 	Discount      float64                  `json:"discount"`
 	TotalPrice    float64                  `json:"total_price"`
+	Notes         string                   `json:"notes"`
 }
 
 // TransactionItemRequest represents an item in transaction request

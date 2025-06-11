@@ -12,8 +12,11 @@ type Transaction struct {
 	PaymentMethod string            `json:"payment_method" gorm:"not null"`
 	Discount      float64           `json:"discount" gorm:"default:0"`
 	TotalPrice    float64           `json:"total_price" gorm:"not null"`
+	TenantID      *uint             `json:"tenant_id" gorm:"index"`
+	Tenant        *Tenant           `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
 	CreatedAt     time.Time         `json:"created_at"`
 	UpdatedAt     time.Time         `json:"updated_at"`
+	Notes         string            `json:"notes,omitempty" gorm:"type:text"`
 }
 
 // TransactionItem represents an item in a transaction
@@ -37,3 +40,5 @@ func (Transaction) TableName() string {
 func (TransactionItem) TableName() string {
 	return "transaction_items"
 }
+
+// Add a migration to add the 'notes' column to the transactions table if not present.
