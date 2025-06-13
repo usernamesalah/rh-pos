@@ -83,7 +83,6 @@ func (r *transactionRepository) GetReportData(ctx context.Context, startDate, en
 
 	query := `
 		SELECT 
-			ti.id,
 			ti.product_id,
 			p.name as product_name,
 			SUM(ti.quantity) as total,
