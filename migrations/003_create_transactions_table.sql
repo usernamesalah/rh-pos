@@ -10,7 +10,9 @@ CREATE TABLE `transactions` (
     `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 CREATE TABLE `transaction_items` (
     `id` int unsigned NOT NULL AUTO_INCREMENT,
     `transaction_id` int unsigned NOT NULL,
@@ -30,5 +32,8 @@ CREATE TABLE `transaction_items` (
 -- +goose Down
 -- +goose StatementBegin
 DROP TABLE `transaction_items`;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
 DROP TABLE `transactions`;
 -- +goose StatementEnd 

@@ -29,9 +29,6 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/main .
 
-# Copy necessary files from builder
-COPY --from=builder /app/migrations ./migrations
-
 # Copy SSL certificates
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
@@ -45,4 +42,4 @@ ENV TZ=Asia/Jakarta
 EXPOSE 8080
 
 # Run the binary
-ENTRYPOINT ["/app/main"] 
+CMD ["/app/main"] 
