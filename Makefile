@@ -29,17 +29,25 @@ prod-logs: ## View production logs
 
 # Build commands
 build: ## Build the application
-	go build -o bin/main cmd/main.go
+	go build -o bin/rh-pos cmd/main.go
 
 build-prod: ## Build production Docker image
 	$(DOCKER_COMPOSE_PROD) build
 
 # Database commands
-migrate: ## Run database migrations
-	go run cmd/seed/main.go migrate
+migrate-up: ## Run all pending migrations
+	./bin/rh-pos migrate up
+
+migrate-down: ## Rollback the last migration
+	./bin/rh-pos migrate down
+
+migrate-status: ## Show migration status
+	./bin/rh-pos migrate status
+
+migrate: migrate-up ## Alias for migrate-up
 
 seed: ## Seed the database with initial data
-	go run cmd/seed/main.go seed
+	./bin/rh-pos seed
 
 # Testing commands
 test: ## Run tests

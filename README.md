@@ -16,6 +16,7 @@ A complete Point of Sale (POS) system backend API built with Go, following Domai
 - **Structured Logging**: JSON-structured logging with slog
 - **Input Validation**: Request validation with proper error handling
 - **Environment Configuration**: Flexible configuration via `.env` files
+- **CLI Interface**: Command-line interface for database management
 
 ## 🔒 Database Transaction Guarantees
 
@@ -52,7 +53,10 @@ This project follows **Clean Architecture** and **Domain-Driven Design** princip
 ```
 cmd/                    # Application entry points
 ├── main.go            # Main server application
-└── seed/              # Database seeding utility
+└── cli/               # CLI commands
+    ├── root.go        # Root command
+    ├── migrate.go     # Migration commands
+    └── seed.go        # Seed command
 
 internal/              # Private application code
 ├── domain/            # Domain layer (entities & interfaces)
@@ -84,6 +88,7 @@ docs/                  # Generated Swagger docs (auto-generated)
 - **Migrations**: Goose
 - **Hot Reload**: Air
 - **Containerization**: Docker & Docker Compose
+- **CLI Framework**: Cobra
 
 ## 📋 Prerequisites
 
@@ -161,7 +166,11 @@ docker-compose up mysql -d
 # Wait for MySQL to be ready (about 10-15 seconds)
 # Check with: docker-compose logs mysql
 
-# Database will be automatically created with sample data
+# Run migrations
+make migrate-up
+
+# Seed initial data
+make seed
 ```
 
 #### Option B: Manual MySQL Setup
@@ -172,16 +181,12 @@ mysql -u root -p -e "CREATE DATABASE rh_pos;"
 
 # Run migrations
 make migrate-up
-```
 
-### 5. Seed Initial Data
-
-```bash
-# Create admin user and sample products
+# Seed initial data
 make seed
 ```
 
-### 6. Run the Application
+### 5. Run the Application
 
 #### Development Mode (with Hot Reload)
 
@@ -195,7 +200,7 @@ air
 
 ```bash
 make build
-./bin/main
+./bin/rh-pos
 ```
 
 #### Docker Mode
@@ -210,6 +215,23 @@ docker run -p 8080:8080 --env-file .env rh-pos
 ```
 
 The API will be available at `http://localhost:8080`
+
+## 📚 CLI Commands
+
+The application provides a command-line interface for database management:
+
+```bash
+# Build the CLI
+make build
+
+# Run migrations
+./bin/rh-pos migrate up    # Run all pending migrations
+./bin/rh-pos migrate down  # Rollback the last migration
+./bin/rh-pos migrate status # Show migration status
+
+# Seed the database
+./bin/rh-pos seed
+```
 
 ## 📚 API Documentation
 
@@ -343,6 +365,7 @@ make clean          # Clean build artifacts
 # Database
 make migrate-up     # Run migrations
 make migrate-down   # Rollback migrations
+make migrate-status # Show migration status
 make seed           # Seed initial data
 
 # Docker

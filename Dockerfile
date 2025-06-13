@@ -16,7 +16,10 @@ RUN go mod download
 COPY . .
 
 # Build the application with optimizations
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o main cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -extldflags=-static" \
+    -trimpath \
+    -o main cmd/main.go
 
 # Final stage
 FROM scratch
@@ -34,6 +37,9 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy timezone data
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Set environment variables
+ENV TZ=Asia/Jakarta
 
 # Expose port
 EXPOSE 8080
