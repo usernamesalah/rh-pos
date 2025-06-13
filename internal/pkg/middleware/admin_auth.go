@@ -6,9 +6,16 @@ import (
 	"github.com/usernamesalah/rh-pos/internal/config"
 )
 
-// AdminAuth is a middleware that checks for Basic Auth credentials
+// AdminAuth is a middleware that checks for Basic Auth credentials and sets tenant_id
 func AdminAuth(cfg *config.Config) echo.MiddlewareFunc {
 	return middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
-		return username == cfg.Admin.Username && password == cfg.Admin.Password, nil
+		// Check admin credentials
+		if username != cfg.Admin.Username || password != cfg.Admin.Password {
+			return false, nil
+		}
+
+		// Set tenant_id to 0 for admin operations (super admin)
+		c.Set("tenant_id", uint(0))
+		return true, nil
 	})
 }

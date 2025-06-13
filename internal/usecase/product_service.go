@@ -58,6 +58,12 @@ func (s *productService) ListProducts(ctx context.Context, page, limit int) ([]e
 func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error) {
 	s.logger.InfoContext(ctx, "updating product", "id", id)
 
+	// Get tenant_id from context
+	tenantID, ok := ctx.Value("tenant_id").(uint)
+	if !ok {
+		return nil, fmt.Errorf("tenant_id not found in context")
+	}
+
 	// Get existing product
 	product, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
@@ -65,26 +71,27 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 	}
 
 	// Update fields
-	if image, ok := updates["image"].(string); ok {
-		product.Image = image
-	}
-	if name, ok := updates["name"].(string); ok {
-		product.Name = name
-	}
-	if sku, ok := updates["sku"].(string); ok {
-		product.SKU = sku
-	}
-	if hargaModal, ok := updates["harga_modal"].(float64); ok {
-		product.HargaModal = hargaModal
-	}
-	if hargaJual, ok := updates["harga_jual"].(float64); ok {
-		product.HargaJual = hargaJual
-	}
-	if stock, ok := updates["stock"].(int); ok {
-		product.Stock = stock
+	for field, value := range updates {
+		switch field {
+		case "image":
+			product.Image = value.(string)
+		case "name":
+			product.Name = value.(string)
+		case "sku":
+			product.SKU = value.(string)
+		case "harga_modal":
+			product.HargaModal = value.(float64)
+		case "harga_jual":
+			product.HargaJual = value.(float64)
+		case "stock":
+			product.Stock = value.(int)
+		}
 	}
 
-	// Save updated product
+	// Ensure tenant_id is set
+	product.TenantID = &tenantID
+
+	// Save changes
 	if err := s.productRepo.Update(ctx, product); err != nil {
 		return nil, fmt.Errorf("failed to update product: %w", err)
 	}
@@ -92,25 +99,57 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 	return product, nil
 }
 
-// UpdateStock updates the stock of a product
+// UpdateStock updates product stock
 func (s *productService) UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error) {
 	s.logger.InfoContext(ctx, "updating product stock", "id", id, "stock", stock)
 
-	// Validate stock
-	if stock < 0 {
-		return nil, fmt.Errorf("stock cannot be negative")
+	// Get tenant_id from context
+	tenantID, ok := ctx.Value("tenant_id").(uint)
+	if !ok {
+		return nil, fmt.Errorf("tenant_id not found in context")
+	}
+
+	// Get existing product
+	product, err := s.productRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
 
 	// Update stock
-	if err := s.productRepo.UpdateStock(ctx, id, stock); err != nil {
-		return nil, fmt.Errorf("failed to update stock: %w", err)
-	}
+	product.Stock = stock
+	product.TenantID = &tenantID
 
-	// Return updated product
-	product, err := s.productRepo.GetByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get updated product: %w", err)
+	// Save changes
+	if err := s.productRepo.Update(ctx, product); err != nil {
+		return nil, fmt.Errorf("failed to update product stock: %w", err)
 	}
 
 	return product, nil
+}
+
+// CreateProduct creates a new product
+func (s *productService) CreateProduct(ctx context.Context, product *entities.Product) error {
+	s.logger.InfoContext(ctx, "creating product", "sku", product.SKU)
+
+	// Get tenant_id from context
+	tenantID, ok := ctx.Value("tenant_id").(uint)
+	if !ok {
+		return fmt.Errorf("tenant_id not found in context")
+	}
+
+	// Set tenant_id
+	product.TenantID = &tenantID
+
+	// Check if SKU already exists
+	existingProduct, err := s.productRepo.GetBySKU(ctx, product.SKU)
+	if err == nil && existingProduct != nil {
+		return fmt.Errorf("product with SKU %s already exists", product.SKU)
+	}
+
+	// Create product
+	if err := s.productRepo.Create(ctx, product); err != nil {
+		return fmt.Errorf("failed to create product: %w", err)
+	}
+
+	return nil
 }

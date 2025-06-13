@@ -27,6 +27,7 @@ func (h *AdminHandler) CreateTenant(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 	}
 
+	// Create tenant
 	if err := h.tenantService.CreateTenant(c.Request().Context(), &tenant); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -39,6 +40,11 @@ func (h *AdminHandler) CreateUser(c echo.Context) error {
 	var user entities.User
 	if err := c.Bind(&user); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	// Validate tenant_id is provided in request
+	if user.TenantID == nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Tenant ID is required for user creation"})
 	}
 
 	// Hash the password before creating the user

@@ -1,13 +1,17 @@
 package server
 
 import (
+	"context"
+
 	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
 	echoSwagger "github.com/swaggo/echo-swagger"
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
+	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	adminMiddleware "github.com/usernamesalah/rh-pos/internal/pkg/middleware"
 )
 
@@ -64,6 +68,32 @@ func SetupRouter(
 	api := e.Group("/api")
 	api.Use(echojwt.WithConfig(echojwt.Config{
 		SigningKey: []byte(cfg.JWT.Secret),
+		ContextKey: "user",
+		SuccessHandler: func(c echo.Context) {
+			user := c.Get("user").(*jwt.Token)
+			claims := user.Claims.(jwt.MapClaims)
+			userID := uint(claims["user_id"].(float64))
+			c.Set("user_id", userID)
+
+			// Safely handle tenant_id claim
+			if tenantID, ok := claims["tenant_id"]; ok {
+				if tenantIDStr, ok := tenantID.(string); ok {
+					// Decode the hashed tenant ID
+					decodedTenantID, err := hash.DecodeHashID(tenantIDStr)
+					if err == nil {
+						c.Set("tenant_id", decodedTenantID)
+						// Set tenant_id in the Go context
+						ctx := context.WithValue(c.Request().Context(), "tenant_id", decodedTenantID)
+						c.SetRequest(c.Request().WithContext(ctx))
+					} else {
+						// Log the error but don't fail the request
+						c.Logger().Errorf("failed to decode tenant_id: %v", err)
+					}
+				} else {
+					c.Logger().Errorf("tenant_id is not a string: %v", tenantID)
+				}
+			}
+		},
 	}))
 
 	// User routes
@@ -72,6 +102,7 @@ func SetupRouter(
 	// Product routes
 	products := api.Group("/products")
 	products.GET("", productHandler.ListProducts)
+	products.POST("", productHandler.CreateProduct)
 	products.GET("/:id", productHandler.GetProduct)
 	products.PUT("/:id", productHandler.UpdateProduct)
 	products.PUT("/:id/stock", productHandler.UpdateStock)

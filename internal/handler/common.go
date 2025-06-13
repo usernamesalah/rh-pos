@@ -76,6 +76,11 @@ func WithHashID[T any](id uint, createdAt, updatedAt string, data T) HashIDRespo
 		if err == nil {
 			var dataMap map[string]interface{}
 			if err := json.Unmarshal(dataBytes, &dataMap); err == nil {
+				// Remove fields that are already in the response
+				delete(dataMap, "id")
+				delete(dataMap, "created_at")
+				delete(dataMap, "updated_at")
+				// Merge remaining fields
 				for k, v := range dataMap {
 					response[k] = v
 				}

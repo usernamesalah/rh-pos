@@ -9,6 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -52,6 +53,13 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 		"exp":      time.Now().Add(time.Hour * 24).Unix(),
 	})
 
+	// Add tenant_id to claims if it exists
+	if user.TenantID != nil {
+		// Hash the tenant_id before adding to claims
+		hashedTenantID := hash.HashID(*user.TenantID)
+		token.Claims.(jwt.MapClaims)["tenant_id"] = hashedTenantID
+	}
+
 	tokenString, err := token.SignedString([]byte(s.jwtSecret))
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to generate token", "error", err, "username", username)
@@ -80,6 +88,13 @@ func (s *authService) ValidateToken(tokenString string) (*entities.User, error) 
 			ID:       uint(claims["user_id"].(float64)),
 			Username: claims["username"].(string),
 			Role:     claims["role"].(string),
+		}
+		if tenantID, ok := claims["tenant_id"].(string); ok {
+			// Decode the hashed tenant ID
+			decodedTenantID, err := hash.DecodeHashID(tenantID)
+			if err == nil {
+				user.TenantID = &decodedTenantID
+			}
 		}
 		return user, nil
 	}

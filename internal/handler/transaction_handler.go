@@ -36,8 +36,8 @@ type CreateTransactionRequest struct {
 
 // TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID uint `json:"product_id" validate:"required"`
-	Quantity  int  `json:"quantity" validate:"required,min=1"`
+	ProductID string `json:"product_id" validate:"required"`
+	Quantity  int    `json:"quantity" validate:"required,min=1"`
 }
 
 // CreateTransaction handles creating a new transaction
@@ -76,9 +76,16 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		Items:         make([]interfaces.TransactionItemRequest, len(req.Items)),
 	}
 
+	// Decode hashed product IDs and convert to service request
 	for i, item := range req.Items {
+		productID, err := hash.DecodeHashID(item.ProductID)
+		if err != nil {
+			h.logger.WarnContext(ctx, "invalid product ID format", "error", err, "hashed_id", item.ProductID)
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
+		}
+
 		serviceReq.Items[i] = interfaces.TransactionItemRequest{
-			ProductID: item.ProductID,
+			ProductID: productID,
 			Quantity:  item.Quantity,
 		}
 	}
@@ -93,10 +100,11 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 	items := make([]map[string]interface{}, len(transaction.Items))
 	for i, item := range transaction.Items {
 		items[i] = map[string]interface{}{
-			"product_id": item.ProductID,
+			"product_id": hash.HashID(item.ProductID),
 			"quantity":   item.Quantity,
 			"price":      item.Price,
 			"product": map[string]interface{}{
+				"id":          hash.HashID(item.Product.ID),
 				"name":        item.Product.Name,
 				"sku":         item.Product.SKU,
 				"image":       item.Product.Image,
@@ -161,10 +169,11 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 		transactionItems := make([]map[string]interface{}, len(t.Items))
 		for j, item := range t.Items {
 			transactionItems[j] = map[string]interface{}{
-				"product_id": item.ProductID,
+				"product_id": hash.HashID(item.ProductID),
 				"quantity":   item.Quantity,
 				"price":      item.Price,
 				"product": map[string]interface{}{
+					"id":          hash.HashID(item.Product.ID),
 					"name":        item.Product.Name,
 					"sku":         item.Product.SKU,
 					"image":       item.Product.Image,
@@ -230,10 +239,11 @@ func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 	items := make([]map[string]interface{}, len(transaction.Items))
 	for i, item := range transaction.Items {
 		items[i] = map[string]interface{}{
-			"product_id": item.ProductID,
+			"product_id": hash.HashID(item.ProductID),
 			"quantity":   item.Quantity,
 			"price":      item.Price,
 			"product": map[string]interface{}{
+				"id":          hash.HashID(item.Product.ID),
 				"name":        item.Product.Name,
 				"sku":         item.Product.SKU,
 				"image":       item.Product.Image,

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 )
@@ -36,6 +37,16 @@ type UpdateProductRequest struct {
 // UpdateStockRequest represents the update stock request
 type UpdateStockRequest struct {
 	Stock int `json:"stock" validate:"required,min=0"`
+}
+
+// CreateProductRequest represents the create product request
+type CreateProductRequest struct {
+	Name       string  `json:"name" validate:"required"`
+	SKU        string  `json:"sku" validate:"required"`
+	Image      string  `json:"image,omitempty"`
+	HargaModal float64 `json:"harga_modal" validate:"required,min=0"`
+	HargaJual  float64 `json:"harga_jual" validate:"required,min=0"`
+	Stock      int     `json:"stock" validate:"required,min=0"`
 }
 
 // ListProducts handles listing products with pagination
@@ -278,4 +289,67 @@ func (h *ProductHandler) UpdateStock(c echo.Context) error {
 	)
 
 	return SuccessResponse(c, http.StatusOK, "Stock updated successfully", response)
+}
+
+// CreateProduct handles creating a new product
+// @Summary Create a new product
+// @Description Create a new product with the provided details
+// @Tags Products
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param request body CreateProductRequest true "Create product request"
+// @Success 201 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 401 {object} Response
+// @Router /products [post]
+func (h *ProductHandler) CreateProduct(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var req CreateProductRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.WarnContext(ctx, "invalid request body", "error", err)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
+	}
+
+	if err := c.Validate(req); err != nil {
+		h.logger.WarnContext(ctx, "validation failed", "error", err)
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
+	}
+
+	// Create product entity
+	product := &entities.Product{
+		Name:       req.Name,
+		SKU:        req.SKU,
+		Image:      req.Image,
+		HargaModal: req.HargaModal,
+		HargaJual:  req.HargaJual,
+		Stock:      req.Stock,
+	}
+
+	// Set tenant_id from context
+	if tenantID, ok := c.Get("tenant_id").(uint); ok {
+		product.TenantID = &tenantID
+	}
+
+	if err := h.productService.CreateProduct(ctx, product); err != nil {
+		h.logger.ErrorContext(ctx, "failed to create product", "error", err)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create product")
+	}
+
+	response := WithHashID(
+		product.ID,
+		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		product.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"name":        product.Name,
+			"sku":         product.SKU,
+			"image":       product.Image,
+			"harga_modal": product.HargaModal,
+			"harga_jual":  product.HargaJual,
+			"stock":       product.Stock,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusCreated, "Product created successfully", response)
 }

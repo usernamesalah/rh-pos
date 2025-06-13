@@ -40,12 +40,19 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 
 	// Use database transaction to ensure data consistency
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Get tenant_id from context
+		tenantID, ok := ctx.Value("tenant_id").(uint)
+		if !ok {
+			return fmt.Errorf("tenant_id not found in context")
+		}
+
 		// Create transaction entity
 		transaction := &entities.Transaction{
 			User:          req.User,
 			PaymentMethod: req.PaymentMethod,
 			Discount:      req.Discount,
 			Notes:         req.Notes,
+			TenantID:      &tenantID,
 			Items:         make([]entities.TransactionItem, 0, len(req.Items)),
 		}
 
@@ -80,7 +87,7 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 
 			// Update product stock within the transaction
 			newStock := product.Stock - item.Quantity
-			if err := tx.Model(&entities.Product{}).Where("id = ?", item.ProductID).Update("stock", newStock).Error; err != nil {
+			if err := tx.Model(&entities.Product{}).Where("id = ? AND tenant_id = ?", item.ProductID, tenantID).Update("stock", newStock).Error; err != nil {
 				return fmt.Errorf("failed to update product stock: %w", err)
 			}
 		}

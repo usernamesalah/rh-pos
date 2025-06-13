@@ -41,7 +41,7 @@ func (r *transactionRepository) GetByID(ctx context.Context, id uint) (*entities
 	r.logger.InfoContext(ctx, "getting transaction by ID", "id", id)
 
 	var transaction entities.Transaction
-	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("id = ?", id).First(&transaction).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("id = ? AND tenant_id = ?", id, ctx.Value("tenant_id")).First(&transaction).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("transaction not found: %w", err)
 		}
@@ -60,14 +60,14 @@ func (r *transactionRepository) List(ctx context.Context, page, limit int) ([]en
 	var total int64
 
 	// Count total transactions
-	if err := r.db.WithContext(ctx).Model(&entities.Transaction{}).Count(&total).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&entities.Transaction{}).Where("tenant_id = ?", ctx.Value("tenant_id")).Count(&total).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to count transactions", "error", err)
 		return nil, 0, fmt.Errorf("failed to count transactions: %w", err)
 	}
 
 	// Get transactions with pagination
 	offset := (page - 1) * limit
-	if err := r.db.WithContext(ctx).Preload("Items.Product").Offset(offset).Limit(limit).Find(&transactions).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("tenant_id = ?", ctx.Value("tenant_id")).Offset(offset).Limit(limit).Find(&transactions).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to list transactions", "error", err)
 		return nil, 0, fmt.Errorf("failed to list transactions: %w", err)
 	}
@@ -91,12 +91,12 @@ func (r *transactionRepository) GetReportData(ctx context.Context, startDate, en
 		FROM transaction_items ti
 		JOIN transactions t ON ti.transaction_id = t.id
 		JOIN products p ON ti.product_id = p.id
-		WHERE t.created_at BETWEEN ? AND ?
+		WHERE t.created_at BETWEEN ? AND ? AND t.tenant_id = ?
 		GROUP BY ti.product_id, p.name
 		ORDER BY total_price DESC
 	`
 
-	if err := r.db.WithContext(ctx).Raw(query, startDate, endDate).Scan(&reportDetails).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(query, startDate, endDate, ctx.Value("tenant_id")).Scan(&reportDetails).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to get report data", "error", err)
 		return nil, fmt.Errorf("failed to get report data: %w", err)
 	}
@@ -107,7 +107,7 @@ func (r *transactionRepository) GetReportData(ctx context.Context, startDate, en
 // Delete deletes a transaction
 func (r *transactionRepository) Delete(ctx context.Context, id uint) error {
 	r.logger.InfoContext(ctx, "deleting transaction", "id", id)
-	if err := r.db.WithContext(ctx).Delete(&entities.Transaction{}, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, ctx.Value("tenant_id")).Delete(&entities.Transaction{}).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to delete transaction", "error", err, "id", id)
 		return fmt.Errorf("failed to delete transaction: %w", err)
 	}
@@ -117,7 +117,7 @@ func (r *transactionRepository) Delete(ctx context.Context, id uint) error {
 // Update updates a transaction
 func (r *transactionRepository) Update(ctx context.Context, transaction *entities.Transaction) error {
 	r.logger.InfoContext(ctx, "updating transaction", "id", transaction.ID)
-	if err := r.db.WithContext(ctx).Save(transaction).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", transaction.ID, ctx.Value("tenant_id")).Save(transaction).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to update transaction", "error", err, "id", transaction.ID)
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}
