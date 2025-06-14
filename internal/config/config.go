@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -14,6 +15,7 @@ type Config struct {
 	JWT      JWTConfig
 	Logger   LoggerConfig
 	Admin    AdminConfig
+	MinIO    MinIOConfig
 }
 
 // ServerConfig holds server configuration
@@ -48,6 +50,17 @@ type AdminConfig struct {
 	Password string
 }
 
+// MinIOConfig holds MinIO configuration
+type MinIOConfig struct {
+	Endpoint        string
+	AccessKeyID     string
+	SecretAccessKey string
+	UseSSL          bool
+	Region          string
+	Bucket          string
+	DefaultExpiry   time.Duration
+}
+
 // Load loads configuration from .env file and environment variables
 func Load() (*Config, error) {
 	// Load .env file if it exists (ignore error if file doesn't exist)
@@ -78,6 +91,15 @@ func Load() (*Config, error) {
 			Username: getEnv("ADMIN_USERNAME", ""),
 			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
+		MinIO: MinIOConfig{
+			Endpoint:        getEnv("MINIO_ENDPOINT", "minio:9000"),
+			AccessKeyID:     getEnv("MINIO_ACCESS_KEY", ""),
+			SecretAccessKey: getEnv("MINIO_SECRET_KEY", ""),
+			UseSSL:          getEnv("MINIO_USE_SSL", "false") == "true",
+			Region:          getEnv("MINIO_REGION", "us-east-1"),
+			Bucket:          getEnv("MINIO_BUCKET", "rh-pos"),
+			DefaultExpiry:   time.Hour * 1, // 24 hours default expiry
+		},
 	}
 
 	// Validate required fields
@@ -91,6 +113,11 @@ func Load() (*Config, error) {
 
 	if config.Admin.Username == "" || config.Admin.Password == "" {
 		return nil, fmt.Errorf("ADMIN_USERNAME and ADMIN_PASSWORD are required")
+	}
+
+	// Validate MinIO configuration
+	if config.MinIO.AccessKeyID == "" || config.MinIO.SecretAccessKey == "" {
+		return nil, fmt.Errorf("MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required")
 	}
 
 	// Construct DSN

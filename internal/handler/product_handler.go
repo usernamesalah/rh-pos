@@ -26,12 +26,10 @@ func NewProductHandler(productService interfaces.ProductService, logger *slog.Lo
 
 // UpdateProductRequest represents the update product request
 type UpdateProductRequest struct {
-	Image      *string  `json:"image,omitempty"`
 	Name       *string  `json:"name,omitempty"`
 	SKU        *string  `json:"sku,omitempty"`
 	HargaModal *float64 `json:"harga_modal,omitempty"`
 	HargaJual  *float64 `json:"harga_jual,omitempty"`
-	Stock      *int     `json:"stock,omitempty"`
 }
 
 // UpdateStockRequest represents the update stock request
@@ -47,6 +45,11 @@ type CreateProductRequest struct {
 	HargaModal float64 `json:"harga_modal" validate:"required,min=0"`
 	HargaJual  float64 `json:"harga_jual" validate:"required,min=0"`
 	Stock      int     `json:"stock" validate:"required,min=0"`
+}
+
+// GetUploadURLRequest represents the request for getting an upload URL
+type GetUploadURLRequest struct {
+	Extension string `json:"extension" validate:"required"`
 }
 
 // ListProducts handles listing products with pagination
@@ -82,6 +85,15 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 	// Convert products to HashIDResponse
 	items := make([]HashIDResponse, len(products))
 	for i, p := range products {
+		// Get presigned image URL if image exists
+		imageURL := ""
+		if p.Image != "" {
+			imageURL, err = h.productService.GetProductImageURL(ctx, &p)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "failed to get image URL", "error", err, "product_id", p.ID)
+			}
+		}
+
 		items[i] = WithHashID(
 			p.ID,
 			p.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -89,7 +101,7 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 			map[string]interface{}{
 				"name":        p.Name,
 				"sku":         p.SKU,
-				"image":       p.Image,
+				"image_url":   imageURL,
 				"harga_modal": p.HargaModal,
 				"harga_jual":  p.HargaJual,
 				"stock":       p.Stock,
@@ -138,6 +150,15 @@ func (h *ProductHandler) GetProduct(c echo.Context) error {
 		return ErrorResponse(c, http.StatusNotFound, "Product not found")
 	}
 
+	// Get presigned image URL if image exists
+	imageURL := ""
+	if product.Image != "" {
+		imageURL, err = h.productService.GetProductImageURL(ctx, product)
+		if err != nil {
+			h.logger.ErrorContext(ctx, "failed to get image URL", "error", err, "product_id", product.ID)
+		}
+	}
+
 	response := WithHashID(
 		product.ID,
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -145,7 +166,7 @@ func (h *ProductHandler) GetProduct(c echo.Context) error {
 		map[string]interface{}{
 			"name":        product.Name,
 			"sku":         product.SKU,
-			"image":       product.Image,
+			"image_url":   imageURL,
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
@@ -189,9 +210,6 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 
 	// Convert to updates map
 	updates := make(map[string]interface{})
-	if req.Image != nil {
-		updates["image"] = *req.Image
-	}
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
@@ -204,14 +222,26 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 	if req.HargaJual != nil {
 		updates["harga_jual"] = *req.HargaJual
 	}
-	if req.Stock != nil {
-		updates["stock"] = *req.Stock
-	}
 
 	product, err := h.productService.UpdateProduct(ctx, id, updates)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to update product", "error", err, "id", id)
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to update product")
+	}
+
+	// Get presigned image URL if image exists
+	imageURL := ""
+	if product.Image != "" {
+		imageURL, err = h.productService.GetProductImageURL(ctx, product)
+		if err != nil {
+			h.logger.ErrorContext(ctx, "failed to get image URL", "error", err, "product_id", product.ID)
+		}
+	}
+
+	// Generate upload URL if no image exists
+	uploadURL, err := h.productService.GetProductUploadURL(ctx, product, "jpg")
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
 	}
 
 	response := WithHashID(
@@ -221,7 +251,8 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 		map[string]interface{}{
 			"name":        product.Name,
 			"sku":         product.SKU,
-			"image":       product.Image,
+			"upload_url":  uploadURL,
+			"image_url":   imageURL,
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
@@ -274,6 +305,15 @@ func (h *ProductHandler) UpdateStock(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to update stock")
 	}
 
+	// Get presigned image URL if image exists
+	imageURL := ""
+	if product.Image != "" {
+		imageURL, err = h.productService.GetProductImageURL(ctx, product)
+		if err != nil {
+			h.logger.ErrorContext(ctx, "failed to get image URL", "error", err, "product_id", product.ID)
+		}
+	}
+
 	response := WithHashID(
 		product.ID,
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -282,6 +322,7 @@ func (h *ProductHandler) UpdateStock(c echo.Context) error {
 			"name":        product.Name,
 			"sku":         product.SKU,
 			"image":       product.Image,
+			"image_url":   imageURL,
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
@@ -305,6 +346,7 @@ func (h *ProductHandler) UpdateStock(c echo.Context) error {
 // @Router /products [post]
 func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	ctx := c.Request().Context()
+	var err error
 
 	var req CreateProductRequest
 	if err := c.Bind(&req); err != nil {
@@ -337,6 +379,12 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create product")
 	}
 
+	// Generate upload URL if no image exists
+	uploadURL, err := h.productService.GetProductUploadURL(ctx, product, "jpg")
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
+	}
+
 	response := WithHashID(
 		product.ID,
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -345,6 +393,7 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 			"name":        product.Name,
 			"sku":         product.SKU,
 			"image":       product.Image,
+			"upload_url":  uploadURL,
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
@@ -352,4 +401,60 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	)
 
 	return SuccessResponse(c, http.StatusCreated, "Product created successfully", response)
+}
+
+// GetUploadURL handles getting a presigned URL for uploading a product image
+// @Summary Get upload URL for product image
+// @Description Get a presigned URL for uploading a product image
+// @Tags Products
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Product ID"
+// @Param request body GetUploadURLRequest true "Upload URL request"
+// @Success 200 {object} Response{data=map[string]string}
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /products/{id}/upload-url [get]
+func (h *ProductHandler) GetUploadURL(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get hashed ID from URL
+	hashedID := c.Param("id")
+
+	// Decode hashed ID to get the actual ID
+	id, err := hash.DecodeHashID(hashedID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "invalid product ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
+	}
+
+	var req GetUploadURLRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.WarnContext(ctx, "invalid request body", "error", err)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
+	}
+
+	if err := c.Validate(req); err != nil {
+		h.logger.WarnContext(ctx, "validation failed", "error", err)
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
+	}
+
+	// Get product
+	product, err := h.productService.GetProduct(ctx, id)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get product", "error", err, "id", id)
+		return ErrorResponse(c, http.StatusNotFound, "Product not found")
+	}
+
+	// Get presigned upload URL
+	uploadURL, err := h.productService.GetProductUploadURL(ctx, product, req.Extension)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get upload URL")
+	}
+
+	return SuccessResponse(c, http.StatusOK, "Upload URL generated successfully", map[string]string{
+		"upload_url": uploadURL,
+	})
 }

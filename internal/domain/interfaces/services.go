@@ -23,6 +23,8 @@ type ProductService interface {
 	UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error)
 	UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error)
 	CreateProduct(ctx context.Context, product *entities.Product) error
+	GetProductImageURL(ctx context.Context, product *entities.Product) (string, error)
+	GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (string, error)
 }
 
 // TransactionService defines transaction business operations

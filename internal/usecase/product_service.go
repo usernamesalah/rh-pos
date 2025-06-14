@@ -4,20 +4,25 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
+	"github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
 )
 
 type productService struct {
 	productRepo interfaces.ProductRepository
+	storage     minio.StorageClient
 	logger      *slog.Logger
 }
 
 // NewProductService creates a new product service
-func NewProductService(productRepo interfaces.ProductRepository, logger *slog.Logger) interfaces.ProductService {
+func NewProductService(productRepo interfaces.ProductRepository, storage minio.StorageClient, logger *slog.Logger) interfaces.ProductService {
 	return &productService{
 		productRepo: productRepo,
+		storage:     storage,
 		logger:      logger,
 	}
 }
@@ -152,4 +157,45 @@ func (s *productService) CreateProduct(ctx context.Context, product *entities.Pr
 	}
 
 	return nil
+}
+
+// GetProductImageURL generates a presigned GET URL for the product image
+func (s *productService) GetProductImageURL(ctx context.Context, product *entities.Product) (string, error) {
+	if product.Image == "" {
+		return "", nil
+	}
+
+	// Generate presigned GET URL with 1 hour expiry
+	url, err := s.storage.GeneratePresignedURL(ctx, product.Image, time.Hour, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate image URL: %w", err)
+	}
+
+	return url, nil
+}
+
+// GetProductUploadURL generates a presigned PUT URL for uploading a product image
+func (s *productService) GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (string, error) {
+	if product == nil {
+		return "", fmt.Errorf("product is required")
+	}
+
+	// Generate image key
+	key := storage.GenerateImageKey(product.ID, ext)
+
+	// Generate presigned URL with 15 minutes expiry
+	url, err := s.storage.GeneratePresignedURL(ctx, key, 15*time.Minute, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
+	}
+
+	// Update product with new image key
+	updates := map[string]interface{}{
+		"image": key,
+	}
+	if _, err := s.UpdateProduct(ctx, product.ID, updates); err != nil {
+		return "", fmt.Errorf("failed to update product with image key: %w", err)
+	}
+
+	return url, nil
 }

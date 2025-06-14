@@ -12,6 +12,7 @@ import (
 
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
+	"github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
 	"github.com/usernamesalah/rh-pos/internal/repository"
 	"github.com/usernamesalah/rh-pos/internal/server"
 	"github.com/usernamesalah/rh-pos/internal/usecase"
@@ -50,6 +51,23 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		return err
 	}
 
+	// Initialize MinIO client
+	minioConfig := &minio.Config{
+		Endpoint:        cfg.MinIO.Endpoint,
+		AccessKeyID:     cfg.MinIO.AccessKeyID,
+		SecretAccessKey: cfg.MinIO.SecretAccessKey,
+		UseSSL:          cfg.MinIO.UseSSL,
+		Region:          cfg.MinIO.Region,
+		Bucket:          cfg.MinIO.Bucket,
+		DefaultExpiry:   cfg.MinIO.DefaultExpiry,
+	}
+
+	minioClient, err := minio.NewClient(minioConfig)
+	if err != nil {
+		appLogger.Error("Failed to initialize MinIO client", "error", err)
+		return err
+	}
+
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db, appLogger)
 	productRepo := repository.NewProductRepository(db, appLogger)
@@ -58,7 +76,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 
 	// Initialize use cases
 	authUseCase := usecase.NewAuthService(userRepo, cfg.JWT.Secret, appLogger)
-	productUseCase := usecase.NewProductService(productRepo, appLogger)
+	productUseCase := usecase.NewProductService(productRepo, minioClient, appLogger)
 	transactionUseCase := usecase.NewTransactionService(transactionRepo, productRepo, db, appLogger)
 	reportUseCase := usecase.NewReportService(transactionRepo, appLogger)
 	tenantUseCase := usecase.NewTenantService(tenantRepo, appLogger)

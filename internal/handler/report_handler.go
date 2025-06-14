@@ -24,12 +24,12 @@ func NewReportHandler(reportService interfaces.ReportService, logger *slog.Logge
 
 // GetSalesReport handles getting sales report
 // @Summary Get sales report
-// @Description Get sales report for a specific date range
+// @Description Get sales report for a specific date range. If no dates provided, returns all time report.
 // @Tags Reports
 // @Produce json
 // @Security bearerAuth
-// @Param start_date query string true "Start date (YYYY-MM-DD)"
-// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param start_date query string false "Start date (YYYY-MM-DD)"
+// @Param end_date query string false "End date (YYYY-MM-DD)"
 // @Success 200 {object} interfaces.ReportResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -40,25 +40,36 @@ func (h *ReportHandler) GetSalesReport(c echo.Context) error {
 	startDateStr := c.QueryParam("start_date")
 	endDateStr := c.QueryParam("end_date")
 
-	if startDateStr == "" || endDateStr == "" {
-		return ErrorResponse(c, http.StatusBadRequest, "start_date and end_date are required")
-	}
+	var startDate, endDate time.Time
+	var err error
 
-	startDate, err := time.Parse("2006-01-02", startDateStr)
-	if err != nil {
-		return ErrorResponse(c, http.StatusBadRequest, "Invalid start_date format, use YYYY-MM-DD")
-	}
+	// If no dates provided, use all time
+	if startDateStr == "" && endDateStr == "" {
+		// Use a very old date for start and current time for end
+		startDate = time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
+		endDate = time.Now()
+	} else {
+		// Validate that both dates are provided if one is provided
+		if startDateStr == "" || endDateStr == "" {
+			return ErrorResponse(c, http.StatusBadRequest, "both start_date and end_date must be provided together")
+		}
 
-	endDate, err := time.Parse("2006-01-02", endDateStr)
-	if err != nil {
-		return ErrorResponse(c, http.StatusBadRequest, "Invalid end_date format, use YYYY-MM-DD")
-	}
+		startDate, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid start_date format, use YYYY-MM-DD")
+		}
 
-	// Set end date to end of day
-	endDate = endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		endDate, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid end_date format, use YYYY-MM-DD")
+		}
 
-	if startDate.After(endDate) {
-		return ErrorResponse(c, http.StatusBadRequest, "start_date must be before or equal to end_date")
+		// Set end date to end of day
+		endDate = endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+
+		if startDate.After(endDate) {
+			return ErrorResponse(c, http.StatusBadRequest, "start_date must be before or equal to end_date")
+		}
 	}
 
 	report, err := h.reportService.GetSalesReport(ctx, startDate, endDate)
