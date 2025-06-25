@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
@@ -33,6 +34,55 @@ func (h *AdminHandler) CreateTenant(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, tenant)
+}
+
+// GetTenant handles getting tenant details
+func (h *AdminHandler) GetTenant(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
+	}
+
+	tenant, err := h.tenantService.GetTenant(c.Request().Context(), uint(id))
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, tenant)
+}
+
+// UpdateTenant handles tenant updates
+func (h *AdminHandler) UpdateTenant(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
+	}
+
+	var tenant entities.Tenant
+	if err := c.Bind(&tenant); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	tenant.ID = uint(id)
+
+	// Update tenant
+	if err := h.tenantService.UpdateTenant(c.Request().Context(), &tenant); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, tenant)
+}
+
+// ListTenants handles listing all tenants
+func (h *AdminHandler) ListTenants(c echo.Context) error {
+	tenants, err := h.tenantService.ListTenants(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, tenants)
 }
 
 // CreateUser handles user creation by admin

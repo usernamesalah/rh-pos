@@ -14,6 +14,7 @@ type AuthService interface {
 	HashPassword(password string) (string, error)
 	GetUserByID(ctx context.Context, id uint) (*entities.User, error)
 	CreateUser(ctx context.Context, user *entities.User) error
+	UpdatePassword(ctx context.Context, userID uint, currentPassword, newPassword string) error
 }
 
 // ProductService defines product business operations

@@ -82,7 +82,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	tenantUseCase := usecase.NewTenantService(tenantRepo, appLogger)
 
 	// Initialize handlers
-	authHandler := handler.NewAuthHandler(authUseCase, appLogger)
+	authHandler := handler.NewAuthHandler(authUseCase, tenantUseCase, appLogger)
 	productHandler := handler.NewProductHandler(productUseCase, appLogger)
 	transactionHandler := handler.NewTransactionHandler(transactionUseCase, appLogger)
 	reportHandler := handler.NewReportHandler(reportUseCase, appLogger)

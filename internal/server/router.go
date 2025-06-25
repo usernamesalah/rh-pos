@@ -62,6 +62,9 @@ func SetupRouter(
 	admin := e.Group("/admin")
 	admin.Use(adminMiddleware.AdminAuth(cfg))
 	admin.POST("/tenants", adminHandler.CreateTenant)
+	admin.GET("/tenants", adminHandler.ListTenants)
+	admin.GET("/tenants/:id", adminHandler.GetTenant)
+	admin.PUT("/tenants/:id", adminHandler.UpdateTenant)
 	admin.POST("/users", adminHandler.CreateUser)
 
 	// Protected routes
@@ -98,6 +101,8 @@ func SetupRouter(
 
 	// User routes
 	api.GET("/profile", authHandler.GetProfile)
+	api.GET("/my-tenant", authHandler.GetMyTenant)
+	api.PUT("/update-password", authHandler.UpdatePassword)
 
 	// Product routes
 	products := api.Group("/products")

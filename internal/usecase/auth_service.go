@@ -141,3 +141,38 @@ func (s *authService) CreateUser(ctx context.Context, user *entities.User) error
 
 	return nil
 }
+
+// UpdatePassword updates a user's password
+func (s *authService) UpdatePassword(ctx context.Context, userID uint, currentPassword, newPassword string) error {
+	s.logger.InfoContext(ctx, "updating password", "user_id", userID)
+
+	// Get user by ID
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get user for password update", "error", err, "user_id", userID)
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Verify current password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)); err != nil {
+		s.logger.WarnContext(ctx, "password update failed: invalid current password", "user_id", userID)
+		return fmt.Errorf("invalid current password")
+	}
+
+	// Hash new password
+	hashedNewPassword, err := s.HashPassword(newPassword)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to hash new password", "error", err, "user_id", userID)
+		return fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	// Update user password
+	user.Password = hashedNewPassword
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		s.logger.ErrorContext(ctx, "failed to update user password", "error", err, "user_id", userID)
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "password updated successfully", "user_id", userID)
+	return nil
+}

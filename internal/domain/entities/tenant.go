@@ -4,10 +4,14 @@ import "time"
 
 // Tenant represents a tenant in the system
 type Tenant struct {
-	ID        uint      `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          uint      `json:"id"`
+	Name        string    `json:"name"`
+	About       string    `json:"about"`
+	Address     string    `json:"address"`
+	PhoneNumber string    `json:"phone_number"`
+	Logo        string    `json:"logo"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // TenantRepository defines the interface for tenant data operations
