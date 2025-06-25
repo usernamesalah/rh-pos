@@ -27,6 +27,7 @@ type ProductService interface {
 	GetProductImageURL(ctx context.Context, product *entities.Product) (string, error)
 	GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (string, error)
 	UploadProductImage(ctx context.Context, productID uint, fileData []byte, contentType string) (*entities.Product, error)
+	GetProductImageBytes(ctx context.Context, productID uint) ([]byte, string, error)
 }
 
 // TransactionService defines transaction business operations

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -529,4 +530,44 @@ func (h *ProductHandler) UploadProductImage(c echo.Context) error {
 	)
 
 	return SuccessResponse(c, http.StatusOK, "Product image uploaded successfully", response)
+}
+
+// GetProductImageBytes handles serving product image bytes directly
+// @Summary Get product image
+// @Description Get product image as bytes (serves the actual image file)
+// @Tags Products
+// @Produce image/*
+// @Security bearerAuth
+// @Param id path string true "Product ID"
+// @Success 200 {file} binary "Image file"
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /products/{id}/image/bytes [get]
+func (h *ProductHandler) GetProductImageBytes(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get hashed ID from URL
+	hashedID := c.Param("id")
+
+	// Decode hashed ID to get the actual ID
+	id, err := hash.DecodeHashID(hashedID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "invalid product ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
+	}
+
+	// Get image bytes from service
+	imageBytes, contentType, err := h.productService.GetProductImageBytes(ctx, id)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get product image bytes", "error", err, "product_id", id)
+		return ErrorResponse(c, http.StatusNotFound, "Product image not found")
+	}
+
+	// Set response headers
+	c.Response().Header().Set("Content-Type", contentType)
+	c.Response().Header().Set("Content-Length", fmt.Sprintf("%d", len(imageBytes)))
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+
+	// Write image bytes to response
+	return c.Blob(http.StatusOK, contentType, imageBytes)
 }

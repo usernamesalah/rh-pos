@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path"
 	"time"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
@@ -241,4 +242,41 @@ func (s *productService) UploadProductImage(ctx context.Context, productID uint,
 	}
 
 	return updatedProduct, nil
+}
+
+// GetProductImageBytes retrieves the image bytes for a product
+func (s *productService) GetProductImageBytes(ctx context.Context, productID uint) ([]byte, string, error) {
+	s.logger.InfoContext(ctx, "getting product image bytes", "product_id", productID)
+
+	// Get existing product
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get product: %w", err)
+	}
+
+	if product.Image == "" {
+		return nil, "", fmt.Errorf("product has no image")
+	}
+
+	// Download image bytes from MinIO
+	imageBytes, err := s.storage.DownloadBytes(ctx, product.Image)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to download image: %w", err)
+	}
+
+	// Determine content type based on file extension
+	contentType := "image/jpeg" // default
+	if len(product.Image) > 4 {
+		ext := path.Ext(product.Image)
+		switch ext {
+		case ".png":
+			contentType = "image/png"
+		case ".gif":
+			contentType = "image/gif"
+		case ".webp":
+			contentType = "image/webp"
+		}
+	}
+
+	return imageBytes, contentType, nil
 }
