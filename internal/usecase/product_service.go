@@ -199,3 +199,46 @@ func (s *productService) GetProductUploadURL(ctx context.Context, product *entit
 
 	return url, nil
 }
+
+// UploadProductImage uploads a product image directly to MinIO
+func (s *productService) UploadProductImage(ctx context.Context, productID uint, fileData []byte, contentType string) (*entities.Product, error) {
+	s.logger.InfoContext(ctx, "uploading product image", "product_id", productID)
+
+	// Get existing product
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get product: %w", err)
+	}
+
+	// Determine file extension from content type
+	ext := "jpg" // default
+	switch contentType {
+	case "image/jpeg":
+		ext = "jpg"
+	case "image/png":
+		ext = "png"
+	case "image/gif":
+		ext = "gif"
+	case "image/webp":
+		ext = "webp"
+	}
+
+	// Generate image key
+	key := storage.GenerateImageKey(product.ID, ext)
+
+	// Upload file to MinIO
+	if err := s.storage.UploadBytes(ctx, key, fileData, contentType); err != nil {
+		return nil, fmt.Errorf("failed to upload image: %w", err)
+	}
+
+	// Update product with new image key
+	updates := map[string]interface{}{
+		"image": key,
+	}
+	updatedProduct, err := s.UpdateProduct(ctx, product.ID, updates)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update product with image key: %w", err)
+	}
+
+	return updatedProduct, nil
+}

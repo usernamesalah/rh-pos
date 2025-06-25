@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -238,12 +239,6 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 		}
 	}
 
-	// Generate upload URL if no image exists
-	uploadURL, err := h.productService.GetProductUploadURL(ctx, product, "jpg")
-	if err != nil {
-		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
-	}
-
 	response := WithHashID(
 		product.ID,
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -251,7 +246,6 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 		map[string]interface{}{
 			"name":        product.Name,
 			"sku":         product.SKU,
-			"upload_url":  uploadURL,
 			"image_url":   imageURL,
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
@@ -346,7 +340,6 @@ func (h *ProductHandler) UpdateStock(c echo.Context) error {
 // @Router /products [post]
 func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	ctx := c.Request().Context()
-	var err error
 
 	var req CreateProductRequest
 	if err := c.Bind(&req); err != nil {
@@ -379,12 +372,6 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create product")
 	}
 
-	// Generate upload URL if no image exists
-	uploadURL, err := h.productService.GetProductUploadURL(ctx, product, "jpg")
-	if err != nil {
-		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
-	}
-
 	response := WithHashID(
 		product.ID,
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -393,7 +380,6 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 			"name":        product.Name,
 			"sku":         product.SKU,
 			"image":       product.Image,
-			"upload_url":  uploadURL,
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
@@ -457,4 +443,90 @@ func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 	return SuccessResponse(c, http.StatusOK, "Upload URL generated successfully", map[string]string{
 		"upload_url": uploadURL,
 	})
+}
+
+// UploadProductImage handles uploading an image for a product
+// @Summary Upload product image
+// @Description Upload an image for a product (replaces existing image if any)
+// @Tags Products
+// @Accept multipart/form-data
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Product ID"
+// @Param image formData file true "Product image"
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /products/{id}/image [post]
+func (h *ProductHandler) UploadProductImage(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Get hashed ID from URL
+	hashedID := c.Param("id")
+
+	// Decode hashed ID to get the actual ID
+	id, err := hash.DecodeHashID(hashedID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "invalid product ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
+	}
+
+	// Parse multipart form
+	if err := c.Request().ParseMultipartForm(32 << 20); err != nil { // 32MB max
+		h.logger.WarnContext(ctx, "failed to parse multipart form", "error", err)
+		return ErrorResponse(c, http.StatusBadRequest, "Failed to parse form data")
+	}
+
+	// Check if image file is provided
+	form := c.Request().MultipartForm
+	files, ok := form.File["image"]
+	if !ok || len(files) == 0 {
+		return ErrorResponse(c, http.StatusBadRequest, "Image file is required")
+	}
+
+	file := files[0]
+
+	// Open the uploaded file
+	src, err := file.Open()
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to open uploaded file", "error", err)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to process uploaded file")
+	}
+	defer src.Close()
+
+	// Read file data
+	fileData, err := io.ReadAll(src)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to read uploaded file", "error", err)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to read uploaded file")
+	}
+
+	// Upload image to MinIO
+	product, err := h.productService.UploadProductImage(ctx, id, fileData, file.Header.Get("Content-Type"))
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to upload product image", "error", err)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to upload product image")
+	}
+
+	// Get presigned image URL
+	imageURL, err := h.productService.GetProductImageURL(ctx, product)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get image URL", "error", err, "product_id", product.ID)
+	}
+
+	response := WithHashID(
+		product.ID,
+		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		product.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"name":        product.Name,
+			"sku":         product.SKU,
+			"image_url":   imageURL,
+			"harga_modal": product.HargaModal,
+			"harga_jual":  product.HargaJual,
+			"stock":       product.Stock,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusOK, "Product image uploaded successfully", response)
 }

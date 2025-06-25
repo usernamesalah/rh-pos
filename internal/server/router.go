@@ -112,6 +112,7 @@ func SetupRouter(
 	products.PUT("/:id", productHandler.UpdateProduct)
 	products.PUT("/:id/stock", productHandler.UpdateStock)
 	products.POST("/:id/upload-url", productHandler.GetUploadURL)
+	products.POST("/:id/image", productHandler.UploadProductImage)
 
 	// Transaction routes
 	transactions := api.Group("/transactions")
