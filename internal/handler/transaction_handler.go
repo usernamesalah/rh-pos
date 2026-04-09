@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"gorm.io/gorm"
@@ -31,14 +32,18 @@ type CreateTransactionRequest struct {
 	User          string                   `json:"user" validate:"required"`
 	PaymentMethod string                   `json:"payment_method" validate:"required"`
 	Discount      float64                  `json:"discount"`
-	TotalPrice    float64                  `json:"total_price" validate:"required,min=0"`
+	TotalPrice    float64                  `json:"total_price"`
 	Notes         string                   `json:"notes"`
+	CustomerName  *string                  `json:"customer_name"`
+	CustomerEmail *string                  `json:"customer_email"`
+	CustomerPhone *string                  `json:"customer_phone"`
 }
 
 // TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID string `json:"product_id" validate:"required"`
-	Quantity  int    `json:"quantity" validate:"required,min=1"`
+	ProductID    string `json:"product_id" validate:"required"`
+	Quantity     int    `json:"quantity" validate:"required,min=1"`
+	WarrantyDays int    `json:"warranty_days"`
 }
 
 // CreateTransaction handles creating a new transaction
@@ -74,6 +79,9 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		Discount:      req.Discount,
 		TotalPrice:    req.TotalPrice,
 		Notes:         req.Notes,
+		CustomerName:  req.CustomerName,
+		CustomerEmail: req.CustomerEmail,
+		CustomerPhone: req.CustomerPhone,
 		Items:         make([]interfaces.TransactionItemRequest, len(req.Items)),
 	}
 
@@ -86,8 +94,9 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		}
 
 		serviceReq.Items[i] = interfaces.TransactionItemRequest{
-			ProductID: productID,
-			Quantity:  item.Quantity,
+			ProductID:    productID,
+			Quantity:     item.Quantity,
+			WarrantyDays: item.WarrantyDays,
 		}
 	}
 
@@ -97,40 +106,7 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create transaction")
 	}
 
-	// Convert items to flattened structure
-	items := make([]map[string]interface{}, len(transaction.Items))
-	for i, item := range transaction.Items {
-		items[i] = map[string]interface{}{
-			"product_id": hash.HashID(item.ProductID),
-			"quantity":   item.Quantity,
-			"price":      item.Price,
-			"product": map[string]interface{}{
-				"id":          hash.HashID(item.Product.ID),
-				"name":        item.Product.Name,
-				"sku":         item.Product.SKU,
-				"image":       item.Product.Image,
-				"harga_modal": item.Product.HargaModal,
-				"harga_jual":  item.Product.HargaJual,
-				"stock":       item.Product.Stock,
-			},
-		}
-	}
-
-	response := WithHashID(
-		transaction.ID,
-		transaction.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		transaction.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		map[string]interface{}{
-			"items":          items,
-			"user":           transaction.User,
-			"payment_method": transaction.PaymentMethod,
-			"discount":       transaction.Discount,
-			"total_price":    transaction.TotalPrice,
-			"notes":          transaction.Notes,
-		},
-	)
-
-	return SuccessResponse(c, http.StatusCreated, "Transaction created successfully", response)
+	return SuccessResponse(c, http.StatusCreated, "Transaction created successfully", formatTransaction(transaction))
 }
 
 // ListTransactions handles listing transactions with pagination
@@ -163,44 +139,12 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to list transactions")
 	}
 
-	// Convert transactions to HashIDResponse
-	items := make([]HashIDResponse, len(transactions))
-	for i, t := range transactions {
-		// Convert items to flattened structure
-		transactionItems := make([]map[string]interface{}, len(t.Items))
-		for j, item := range t.Items {
-			transactionItems[j] = map[string]interface{}{
-				"product_id": hash.HashID(item.ProductID),
-				"quantity":   item.Quantity,
-				"price":      item.Price,
-				"product": map[string]interface{}{
-					"id":          hash.HashID(item.Product.ID),
-					"name":        item.Product.Name,
-					"sku":         item.Product.SKU,
-					"image":       item.Product.Image,
-					"harga_modal": item.Product.HargaModal,
-					"harga_jual":  item.Product.HargaJual,
-					"stock":       item.Product.Stock,
-				},
-			}
-		}
-
-		items[i] = WithHashID(
-			t.ID,
-			t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			map[string]interface{}{
-				"items":          transactionItems,
-				"user":           t.User,
-				"payment_method": t.PaymentMethod,
-				"discount":       t.Discount,
-				"total_price":    t.TotalPrice,
-				"notes":          t.Notes,
-			},
-		)
+	result := make([]HashIDResponse, len(transactions))
+	for i := range transactions {
+		result[i] = formatTransaction(&transactions[i])
 	}
 
-	return SuccessPaginatedResponse(c, http.StatusOK, "Transactions retrieved successfully", items, total, page, limit)
+	return SuccessPaginatedResponse(c, http.StatusOK, "Transactions retrieved successfully", result, total, page, limit)
 }
 
 // GetTransaction handles getting a single transaction by ID
@@ -236,13 +180,18 @@ func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get transaction")
 	}
 
-	// Convert items to flattened structure
-	items := make([]map[string]interface{}, len(transaction.Items))
-	for i, item := range transaction.Items {
-		items[i] = map[string]interface{}{
-			"product_id": hash.HashID(item.ProductID),
-			"quantity":   item.Quantity,
-			"price":      item.Price,
+	return SuccessResponse(c, http.StatusOK, "Transaction retrieved successfully", formatTransaction(transaction))
+}
+
+func formatTransactionItems(items []entities.TransactionItem) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(items))
+	for i, item := range items {
+		itemMap := map[string]interface{}{
+			"product_id":          hash.HashID(item.ProductID),
+			"quantity":            item.Quantity,
+			"price":               item.Price,
+			"warranty_days":       item.WarrantyDays,
+			"discount_percentage": item.DiscountPercentage,
 			"product": map[string]interface{}{
 				"id":          hash.HashID(item.Product.ID),
 				"name":        item.Product.Name,
@@ -253,21 +202,36 @@ func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 				"stock":       item.Product.Stock,
 			},
 		}
+		if item.CampaignID != nil {
+			itemMap["campaign_id"] = hash.HashID(*item.CampaignID)
+		}
+		result[i] = itemMap
 	}
+	return result
+}
 
-	response := WithHashID(
-		transaction.ID,
-		transaction.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		transaction.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		map[string]interface{}{
-			"items":          items,
-			"user":           transaction.User,
-			"payment_method": transaction.PaymentMethod,
-			"discount":       transaction.Discount,
-			"total_price":    transaction.TotalPrice,
-			"notes":          transaction.Notes,
-		},
+func formatTransaction(t *entities.Transaction) HashIDResponse {
+	data := map[string]interface{}{
+		"items":          formatTransactionItems(t.Items),
+		"user":           t.User,
+		"payment_method": t.PaymentMethod,
+		"discount":       t.Discount,
+		"total_price":    t.TotalPrice,
+		"notes":          t.Notes,
+	}
+	if t.CustomerName != nil {
+		data["customer_name"] = *t.CustomerName
+	}
+	if t.CustomerEmail != nil {
+		data["customer_email"] = *t.CustomerEmail
+	}
+	if t.CustomerPhone != nil {
+		data["customer_phone"] = *t.CustomerPhone
+	}
+	return WithHashID(
+		t.ID,
+		t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		data,
 	)
-
-	return SuccessResponse(c, http.StatusOK, "Transaction retrieved successfully", response)
 }

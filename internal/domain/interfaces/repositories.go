@@ -32,11 +32,25 @@ type ProductRepository interface {
 type TransactionRepository interface {
 	Create(ctx context.Context, transaction *entities.Transaction) error
 	GetByID(ctx context.Context, id uint) (*entities.Transaction, error)
+	GetByIDWithoutTenant(ctx context.Context, id uint) (*entities.Transaction, error)
+	SearchByPhone(ctx context.Context, phone string) ([]entities.Transaction, error)
 	List(ctx context.Context, page, limit int) ([]entities.Transaction, int64, error)
 	GetReportData(ctx context.Context, startDate, endDate time.Time) ([]ReportDetail, error)
 	GetTransactionCount(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	Update(ctx context.Context, transaction *entities.Transaction) error
 	Delete(ctx context.Context, id uint) error
+}
+
+// DiscountCampaignRepository defines the interface for discount campaign data operations
+type DiscountCampaignRepository interface {
+	Create(ctx context.Context, campaign *entities.DiscountCampaign) error
+	GetByID(ctx context.Context, id uint) (*entities.DiscountCampaign, error)
+	List(ctx context.Context, page, limit int) ([]entities.DiscountCampaign, int64, error)
+	Update(ctx context.Context, campaign *entities.DiscountCampaign) error
+	Delete(ctx context.Context, id uint) error
+	AddProducts(ctx context.Context, campaignID uint, productIDs []uint) error
+	RemoveProduct(ctx context.Context, campaignID uint, productID uint) error
+	GetActiveCampaignsForProduct(ctx context.Context, productID uint) ([]entities.DiscountCampaign, error)
 }
 
 // TenantRepository defines the interface for tenant data operations

@@ -135,6 +135,27 @@ func (r *transactionRepository) GetTransactionCount(ctx context.Context, startDa
 	return count, nil
 }
 
+// GetByIDWithoutTenant retrieves a transaction by ID without tenant filtering (for public warranty endpoints)
+func (r *transactionRepository) GetByIDWithoutTenant(ctx context.Context, id uint) (*entities.Transaction, error) {
+	var transaction entities.Transaction
+	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("id = ?", id).First(&transaction).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("transaction not found: %w", err)
+		}
+		return nil, fmt.Errorf("failed to get transaction: %w", err)
+	}
+	return &transaction, nil
+}
+
+// SearchByPhone searches transactions by customer phone (no tenant filtering, for public warranty endpoints)
+func (r *transactionRepository) SearchByPhone(ctx context.Context, phone string) ([]entities.Transaction, error) {
+	var transactions []entities.Transaction
+	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("customer_phone = ?", phone).Find(&transactions).Error; err != nil {
+		return nil, fmt.Errorf("failed to search transactions by phone: %w", err)
+	}
+	return transactions, nil
+}
+
 // Delete deletes a transaction
 func (r *transactionRepository) Delete(ctx context.Context, id uint) error {
 	r.logger.InfoContext(ctx, "deleting transaction", "id", id)

@@ -39,6 +39,23 @@ type TransactionService interface {
 	ListTransactions(ctx context.Context, page, limit int) ([]entities.Transaction, int64, error)
 }
 
+// DiscountCampaignService defines discount campaign business operations
+type DiscountCampaignService interface {
+	Create(ctx context.Context, req CreateCampaignRequest) (*entities.DiscountCampaign, error)
+	GetByID(ctx context.Context, id uint) (*entities.DiscountCampaign, error)
+	List(ctx context.Context, page, limit int) ([]entities.DiscountCampaign, int64, error)
+	Update(ctx context.Context, id uint, req UpdateCampaignRequest) (*entities.DiscountCampaign, error)
+	Delete(ctx context.Context, id uint) error
+	AddProducts(ctx context.Context, campaignID uint, productIDs []uint) error
+	RemoveProduct(ctx context.Context, campaignID uint, productID uint) error
+}
+
+// WarrantyService defines warranty check operations
+type WarrantyService interface {
+	CheckWarranty(ctx context.Context, hashedTransactionID string) (*WarrantyResponse, error)
+	SearchByPhone(ctx context.Context, phone string) ([]WarrantyResponse, error)
+}
+
 // ReportService defines reporting operations
 type ReportService interface {
 	GetSalesReport(ctx context.Context, startDate, endDate time.Time) (*ReportResponse, error)
@@ -61,12 +78,54 @@ type CreateTransactionRequest struct {
 	Discount      float64                  `json:"discount"`
 	TotalPrice    float64                  `json:"total_price"`
 	Notes         string                   `json:"notes"`
+	CustomerName  *string                  `json:"customer_name"`
+	CustomerEmail *string                  `json:"customer_email"`
+	CustomerPhone *string                  `json:"customer_phone"`
 }
 
 // TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID uint `json:"product_id"`
-	Quantity  int  `json:"quantity"`
+	ProductID    uint `json:"product_id"`
+	Quantity     int  `json:"quantity"`
+	WarrantyDays int  `json:"warranty_days"`
+}
+
+// CreateCampaignRequest represents the request to create a discount campaign
+type CreateCampaignRequest struct {
+	Name               string    `json:"name"`
+	DiscountPercentage float64   `json:"discount_percentage"`
+	StartDate          time.Time `json:"start_date"`
+	EndDate            time.Time `json:"end_date"`
+	ProductIDs         []uint    `json:"product_ids"`
+}
+
+// UpdateCampaignRequest represents the request to update a discount campaign
+type UpdateCampaignRequest struct {
+	Name               *string    `json:"name"`
+	DiscountPercentage *float64   `json:"discount_percentage"`
+	StartDate          *time.Time `json:"start_date"`
+	EndDate            *time.Time `json:"end_date"`
+}
+
+// WarrantyResponse represents the public warranty check response
+type WarrantyResponse struct {
+	TransactionID   string                `json:"transaction_id"`
+	TransactionDate time.Time             `json:"transaction_date"`
+	CustomerName    string                `json:"customer_name,omitempty"`
+	CustomerEmail   string                `json:"customer_email,omitempty"`
+	CustomerPhone   string                `json:"customer_phone,omitempty"`
+	Items           []WarrantyItemResponse `json:"items"`
+}
+
+// WarrantyItemResponse represents a single item in warranty response
+type WarrantyItemResponse struct {
+	ProductName   string    `json:"product_name"`
+	Quantity      int       `json:"quantity"`
+	WarrantyDays  int       `json:"warranty_days"`
+	WarrantyStart time.Time `json:"warranty_start"`
+	WarrantyEnd   time.Time `json:"warranty_end"`
+	IsActive      bool      `json:"is_active"`
+	DaysRemaining int       `json:"days_remaining"`
 }
 
 // ReportResponse represents the sales report response

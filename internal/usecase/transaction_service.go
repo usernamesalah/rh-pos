@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
@@ -15,15 +14,17 @@ import (
 type transactionService struct {
 	transactionRepo interfaces.TransactionRepository
 	productRepo     interfaces.ProductRepository
+	campaignRepo    interfaces.DiscountCampaignRepository
 	db              *gorm.DB
 	logger          *slog.Logger
 }
 
 // NewTransactionService creates a new transaction service
-func NewTransactionService(transactionRepo interfaces.TransactionRepository, productRepo interfaces.ProductRepository, db *gorm.DB, logger *slog.Logger) interfaces.TransactionService {
+func NewTransactionService(transactionRepo interfaces.TransactionRepository, productRepo interfaces.ProductRepository, campaignRepo interfaces.DiscountCampaignRepository, db *gorm.DB, logger *slog.Logger) interfaces.TransactionService {
 	return &transactionService{
 		transactionRepo: transactionRepo,
 		productRepo:     productRepo,
+		campaignRepo:    campaignRepo,
 		db:              db,
 		logger:          logger,
 	}
@@ -55,11 +56,15 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 			Discount:      req.Discount,
 			Notes:         req.Notes,
 			TenantID:      &tenantID,
+			CustomerName:  req.CustomerName,
+			CustomerEmail: req.CustomerEmail,
+			CustomerPhone: req.CustomerPhone,
 			Items:         make([]entities.TransactionItem, 0, len(req.Items)),
 		}
 
 		// Calculate total price from products
-		var calculatedTotal float64
+		var campaignDiscountedTotal float64 // sum of items with campaign discounts (already discounted)
+		var regularTotal float64            // sum of items without campaign discounts (before transaction-level discount)
 
 		// Process each item
 		for _, item := range req.Items {
@@ -69,21 +74,39 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 				return fmt.Errorf("product not found: %w", err)
 			}
 
-			// Calculate item total
-			itemTotal := product.HargaJual * float64(item.Quantity)
-			calculatedTotal += itemTotal
-
-			// Create transaction item
 			transactionItem := entities.TransactionItem{
-				ProductID: item.ProductID,
-				Quantity:  item.Quantity,
-				Price:     product.HargaJual,
+				ProductID:    item.ProductID,
+				Quantity:     item.Quantity,
+				WarrantyDays: item.WarrantyDays,
+				Price:        product.HargaJual,
+			}
+
+			// Check for active campaign discount
+			campaigns, err := s.campaignRepo.GetActiveCampaignsForProduct(ctx, item.ProductID)
+			if err != nil {
+				return fmt.Errorf("failed to check campaigns for product: %w", err)
+			}
+
+			if len(campaigns) > 0 {
+				// Use highest discount percentage
+				best := campaigns[0]
+				for _, c := range campaigns[1:] {
+					if c.DiscountPercentage > best.DiscountPercentage {
+						best = c
+					}
+				}
+				discountedPrice := product.HargaJual * (1 - best.DiscountPercentage/100)
+				transactionItem.Price = discountedPrice
+				transactionItem.DiscountPercentage = best.DiscountPercentage
+				transactionItem.CampaignID = &best.ID
+				campaignDiscountedTotal += discountedPrice * float64(item.Quantity)
+			} else {
+				regularTotal += product.HargaJual * float64(item.Quantity)
 			}
 
 			transaction.Items = append(transaction.Items, transactionItem)
 
 			// Atomically deduct stock only if sufficient quantity exists.
-			// Using a conditional UPDATE avoids the TOCTOU race condition.
 			result := tx.Model(&entities.Product{}).
 				Where("id = ? AND tenant_id = ? AND stock >= ?", item.ProductID, tenantID, item.Quantity).
 				Update("stock", gorm.Expr("stock - ?", item.Quantity))
@@ -95,18 +118,14 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 			}
 		}
 
-		// Apply discount if any
+		// Apply transaction-level discount only to regular (non-campaign) items
 		if transaction.Discount > 0 {
-			calculatedTotal = calculatedTotal * (1 - transaction.Discount/100)
+			regularTotal = regularTotal * (1 - transaction.Discount/100)
 		}
 
-		// Validate total price matches calculated total (epsilon comparison for float64)
-		const priceEpsilon = 0.01
-		if math.Abs(req.TotalPrice-calculatedTotal) > priceEpsilon {
-			return fmt.Errorf("total price mismatch: provided %.2f, calculated %.2f", req.TotalPrice, calculatedTotal)
-		}
+		calculatedTotal := campaignDiscountedTotal + regularTotal
 
-		// Set the validated total price
+		// Set the server-calculated total price (authoritative)
 		transaction.TotalPrice = calculatedTotal
 
 		// Create transaction within the DB transaction

@@ -77,13 +77,16 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	productRepo := repository.NewProductRepository(db, appLogger)
 	transactionRepo := repository.NewTransactionRepository(db, appLogger)
 	tenantRepo := repository.NewTenantRepository(db, appLogger)
+	campaignRepo := repository.NewDiscountCampaignRepository(db, appLogger)
 
 	// Initialize use cases
 	authUseCase := usecase.NewAuthService(userRepo, cfg.JWT.Secret, appLogger)
 	productUseCase := usecase.NewProductService(productRepo, minioClient, appLogger)
-	transactionUseCase := usecase.NewTransactionService(transactionRepo, productRepo, db, appLogger)
+	transactionUseCase := usecase.NewTransactionService(transactionRepo, productRepo, campaignRepo, db, appLogger)
 	reportUseCase := usecase.NewReportService(transactionRepo, appLogger)
 	tenantUseCase := usecase.NewTenantService(tenantRepo, appLogger)
+	campaignUseCase := usecase.NewDiscountCampaignService(campaignRepo, appLogger)
+	warrantyUseCase := usecase.NewWarrantyService(transactionRepo, appLogger)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authUseCase, tenantUseCase, appLogger)
@@ -91,6 +94,8 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	transactionHandler := handler.NewTransactionHandler(transactionUseCase, appLogger)
 	reportHandler := handler.NewReportHandler(reportUseCase, appLogger)
 	adminHandler := handler.NewAdminHandler(tenantUseCase, authUseCase)
+	campaignHandler := handler.NewDiscountCampaignHandler(campaignUseCase, appLogger)
+	warrantyHandler := handler.NewWarrantyHandler(warrantyUseCase, appLogger)
 
 	// Setup router
 	e := server.SetupRouter(
@@ -100,6 +105,8 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		transactionHandler,
 		reportHandler,
 		adminHandler,
+		campaignHandler,
+		warrantyHandler,
 	)
 
 	// Start server

@@ -35,6 +35,8 @@ func SetupRouter(
 	transactionHandler *handler.TransactionHandler,
 	reportHandler *handler.ReportHandler,
 	adminHandler *handler.AdminHandler,
+	campaignHandler *handler.DiscountCampaignHandler,
+	warrantyHandler *handler.WarrantyHandler,
 ) *echo.Echo {
 	e := echo.New()
 
@@ -135,6 +137,21 @@ func SetupRouter(
 	// Report routes
 	reports := api.Group("/reports")
 	reports.GET("", reportHandler.GetSalesReport)
+
+	// Discount campaign routes (JWT protected)
+	campaigns := api.Group("/discount-campaigns")
+	campaigns.POST("", campaignHandler.CreateCampaign)
+	campaigns.GET("", campaignHandler.ListCampaigns)
+	campaigns.GET("/:id", campaignHandler.GetCampaign)
+	campaigns.PUT("/:id", campaignHandler.UpdateCampaign)
+	campaigns.DELETE("/:id", campaignHandler.DeleteCampaign)
+	campaigns.POST("/:id/products", campaignHandler.AddProducts)
+	campaigns.DELETE("/:id/products/:product_id", campaignHandler.RemoveProduct)
+
+	// Public warranty routes (no auth required)
+	warranty := e.Group("/warranty")
+	warranty.GET("/search", warrantyHandler.SearchByPhone)
+	warranty.GET("/:transaction_id", warrantyHandler.CheckWarranty)
 
 	return e
 }
