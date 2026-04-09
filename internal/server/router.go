@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
@@ -11,6 +12,7 @@ import (
 	echoSwagger "github.com/swaggo/echo-swagger"
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	adminMiddleware "github.com/usernamesalah/rh-pos/internal/pkg/middleware"
 )
@@ -42,7 +44,11 @@ func SetupRouter(
 	// Middleware
 	e.Use(echoMiddleware.Logger())
 	e.Use(echoMiddleware.Recover())
-	e.Use(echoMiddleware.CORS())
+	e.Use(echoMiddleware.CORSWithConfig(echoMiddleware.CORSConfig{
+		AllowOrigins: cfg.Server.AllowedOrigins,
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+	}))
 
 	// Swagger documentation
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
@@ -75,25 +81,30 @@ func SetupRouter(
 		SuccessHandler: func(c echo.Context) {
 			user := c.Get("user").(*jwt.Token)
 			claims := user.Claims.(jwt.MapClaims)
-			userID := uint(claims["user_id"].(float64))
+
+			// Safe user_id extraction
+			userIDFloat, ok := claims["user_id"].(float64)
+			if !ok {
+				c.Logger().Errorf("user_id claim missing or wrong type")
+				return
+			}
+			userID := uint(userIDFloat)
 			c.Set("user_id", userID)
 
 			// Safely handle tenant_id claim
-			if tenantID, ok := claims["tenant_id"]; ok {
-				if tenantIDStr, ok := tenantID.(string); ok {
-					// Decode the hashed tenant ID
+			if tenantIDRaw, ok := claims["tenant_id"]; ok {
+				if tenantIDStr, ok := tenantIDRaw.(string); ok {
 					decodedTenantID, err := hash.DecodeHashID(tenantIDStr)
 					if err == nil {
 						c.Set("tenant_id", decodedTenantID)
-						// Set tenant_id in the Go context
-						ctx := context.WithValue(c.Request().Context(), "tenant_id", decodedTenantID)
+						// Set tenant_id in the Go context using typed key
+						ctx := context.WithValue(c.Request().Context(), ctxkey.TenantID, decodedTenantID)
 						c.SetRequest(c.Request().WithContext(ctx))
 					} else {
-						// Log the error but don't fail the request
 						c.Logger().Errorf("failed to decode tenant_id: %v", err)
 					}
 				} else {
-					c.Logger().Errorf("tenant_id is not a string: %v", tenantID)
+					c.Logger().Errorf("tenant_id claim is not a string: %T", tenantIDRaw)
 				}
 			}
 		},

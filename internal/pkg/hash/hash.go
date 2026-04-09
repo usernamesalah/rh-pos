@@ -9,14 +9,24 @@ import (
 const (
 	alphabet  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 	minLength = 7
-	salt      = "__next_move_to_config__"
 )
 
+var hashSalt string
+
+// Init sets the salt used for all hash operations.
+// Must be called once during application startup before any hash/decode calls.
+func Init(salt string) {
+	hashSalt = salt
+}
+
 func newHashIDs() (*hashids.HashID, error) {
+	if hashSalt == "" {
+		return nil, fmt.Errorf("hash salt not initialized: call hash.Init() at startup")
+	}
 	return hashids.NewWithData(&hashids.HashIDData{
 		Alphabet:  alphabet,
 		MinLength: minLength,
-		Salt:      salt,
+		Salt:      hashSalt,
 	})
 }
 
@@ -34,12 +44,12 @@ func HashID(id uint) string {
 }
 
 // DecodeHashID decodes a hashed ID back to its original uint value
-func DecodeHashID(hash string) (uint, error) {
+func DecodeHashID(hashed string) (uint, error) {
 	h, err := newHashIDs()
 	if err != nil {
 		return 0, fmt.Errorf("failed to create hashids: %w", err)
 	}
-	ids, err := h.DecodeWithError(hash)
+	ids, err := h.DecodeWithError(hashed)
 	if err != nil {
 		return 0, fmt.Errorf("invalid hash format: %w", err)
 	}
@@ -47,9 +57,4 @@ func DecodeHashID(hash string) (uint, error) {
 		return 0, fmt.Errorf("invalid hash: expected 1 ID, got %d", len(ids))
 	}
 	return uint(ids[0]), nil
-}
-
-// UnhashID is deprecated, use DecodeHashID instead
-func UnhashID(hash string) string {
-	return hash
 }

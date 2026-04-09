@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/usernamesalah/rh-pos/internal/domain/apperrors"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
@@ -84,10 +85,22 @@ func (s *authService) ValidateToken(tokenString string) (*entities.User, error) 
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		userIDFloat, ok := claims["user_id"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("invalid token claims: user_id")
+		}
+		username, ok := claims["username"].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid token claims: username")
+		}
+		role, ok := claims["role"].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid token claims: role")
+		}
 		user := &entities.User{
-			ID:       uint(claims["user_id"].(float64)),
-			Username: claims["username"].(string),
-			Role:     claims["role"].(string),
+			ID:       uint(userIDFloat),
+			Username: username,
+			Role:     role,
 		}
 		if tenantID, ok := claims["tenant_id"].(string); ok {
 			// Decode the hashed tenant ID
@@ -150,13 +163,14 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uint, currentPa
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get user for password update", "error", err, "user_id", userID)
-		return fmt.Errorf("user not found: %w", err)
+		// Return generic error — do not expose whether the account exists
+		return fmt.Errorf("password update failed: %w", apperrors.ErrUserNotFound)
 	}
 
 	// Verify current password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)); err != nil {
 		s.logger.WarnContext(ctx, "password update failed: invalid current password", "user_id", userID)
-		return fmt.Errorf("invalid current password")
+		return fmt.Errorf("%w", apperrors.ErrInvalidPassword)
 	}
 
 	// Hash new password

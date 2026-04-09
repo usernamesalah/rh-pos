@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"gorm.io/gorm"
 )
 
@@ -41,7 +43,7 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 	// Use database transaction to ensure data consistency
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Get tenant_id from context
-		tenantID, ok := ctx.Value("tenant_id").(uint)
+		tenantID, ok := ctxkey.TenantIDFromContext(ctx)
 		if !ok {
 			return fmt.Errorf("tenant_id not found in context")
 		}
@@ -61,15 +63,10 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 
 		// Process each item
 		for _, item := range req.Items {
-			// Validate product exists and has sufficient stock
+			// Read product for price and name — stock check is done atomically below
 			product, err := s.productRepo.GetByID(ctx, item.ProductID)
 			if err != nil {
 				return fmt.Errorf("product not found: %w", err)
-			}
-
-			if product.Stock < item.Quantity {
-				return fmt.Errorf("insufficient stock for product %s: requested %d, available %d",
-					product.Name, item.Quantity, product.Stock)
 			}
 
 			// Calculate item total
@@ -85,10 +82,16 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 
 			transaction.Items = append(transaction.Items, transactionItem)
 
-			// Update product stock within the transaction
-			newStock := product.Stock - item.Quantity
-			if err := tx.Model(&entities.Product{}).Where("id = ? AND tenant_id = ?", item.ProductID, tenantID).Update("stock", newStock).Error; err != nil {
-				return fmt.Errorf("failed to update product stock: %w", err)
+			// Atomically deduct stock only if sufficient quantity exists.
+			// Using a conditional UPDATE avoids the TOCTOU race condition.
+			result := tx.Model(&entities.Product{}).
+				Where("id = ? AND tenant_id = ? AND stock >= ?", item.ProductID, tenantID, item.Quantity).
+				Update("stock", gorm.Expr("stock - ?", item.Quantity))
+			if result.Error != nil {
+				return fmt.Errorf("failed to update product stock: %w", result.Error)
+			}
+			if result.RowsAffected == 0 {
+				return fmt.Errorf("insufficient stock for product %s", product.Name)
 			}
 		}
 
@@ -97,8 +100,9 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 			calculatedTotal = calculatedTotal * (1 - transaction.Discount/100)
 		}
 
-		// Validate total price matches calculated total
-		if req.TotalPrice != calculatedTotal {
+		// Validate total price matches calculated total (epsilon comparison for float64)
+		const priceEpsilon = 0.01
+		if math.Abs(req.TotalPrice-calculatedTotal) > priceEpsilon {
 			return fmt.Errorf("total price mismatch: provided %.2f, calculated %.2f", req.TotalPrice, calculatedTotal)
 		}
 

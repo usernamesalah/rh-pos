@@ -12,6 +12,7 @@ import (
 
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
+	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
 	"github.com/usernamesalah/rh-pos/internal/repository"
 	"github.com/usernamesalah/rh-pos/internal/server"
@@ -34,6 +35,9 @@ func main() {
 		Level: slog.LevelInfo,
 	})
 	appLogger := slog.New(logHandler)
+
+	// Initialize hash ID salt from config
+	hash.Init(cfg.Hash.Salt)
 
 	if err := run(cfg, appLogger); err != nil {
 		appLogger.Error("error: shutting down", "error", err)
@@ -62,7 +66,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		DefaultExpiry:   cfg.MinIO.DefaultExpiry,
 	}
 
-	minioClient, err := minio.NewClient(minioConfig)
+	minioClient, err := minio.NewClient(minioConfig, appLogger)
 	if err != nil {
 		appLogger.Error("Failed to initialize MinIO client", "error", err)
 		return err

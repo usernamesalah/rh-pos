@@ -41,10 +41,14 @@ func (s *reportService) GetSalesReport(ctx context.Context, startDate, endDate t
 		itemsSold += detail.Total
 	}
 
-	// Calculate average transaction value
+	// Calculate average transaction value using distinct transaction count
 	var averageTransaction float64
-	if len(details) > 0 {
-		averageTransaction = totalRevenue / float64(len(details))
+	txCount, err := s.transactionRepo.GetTransactionCount(ctx, startDate, endDate)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to get transaction count for average", "error", err)
+	}
+	if txCount > 0 {
+		averageTransaction = totalRevenue / float64(txCount)
 	}
 
 	response := &interfaces.ReportResponse{

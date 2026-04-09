@@ -97,13 +97,6 @@ func (h *AdminHandler) CreateUser(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Tenant ID is required for user creation"})
 	}
 
-	// Hash the password before creating the user
-	hashedPassword, err := h.userService.HashPassword(user.Password)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
-	}
-	user.Password = hashedPassword
-
 	// Create the user
 	if err := h.userService.CreateUser(c.Request().Context(), &user); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

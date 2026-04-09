@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
@@ -427,6 +428,13 @@ func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
 	}
 
+	// Validate extension against allowlist
+	allowedExts := map[string]bool{"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true}
+	ext := strings.ToLower(strings.TrimPrefix(req.Extension, "."))
+	if !allowedExts[ext] {
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid file extension. Allowed: jpg, jpeg, png, gif, webp")
+	}
+
 	// Get product
 	product, err := h.productService.GetProduct(ctx, id)
 	if err != nil {
@@ -434,8 +442,8 @@ func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 		return ErrorResponse(c, http.StatusNotFound, "Product not found")
 	}
 
-	// Get presigned upload URL
-	uploadURL, err := h.productService.GetProductUploadURL(ctx, product, req.Extension)
+	// Get presigned upload URL and image key
+	uploadURL, imageKey, err := h.productService.GetProductUploadURL(ctx, product, ext)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get upload URL")
@@ -443,6 +451,7 @@ func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 
 	return SuccessResponse(c, http.StatusOK, "Upload URL generated successfully", map[string]string{
 		"upload_url": uploadURL,
+		"image_key":  imageKey,
 	})
 }
 

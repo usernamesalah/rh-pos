@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -38,7 +39,7 @@ func (r *tenantRepository) GetByID(ctx context.Context, id uint) (*entities.Tena
 	r.logger.InfoContext(ctx, "getting tenant by ID", "id", id)
 	var tenant entities.Tenant
 	if err := r.db.WithContext(ctx).First(&tenant, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("tenant not found: %w", err)
 		}
 		r.logger.ErrorContext(ctx, "failed to get tenant", "error", err, "id", id)

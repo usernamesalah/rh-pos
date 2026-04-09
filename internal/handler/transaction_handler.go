@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -228,7 +229,7 @@ func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 
 	transaction, err := h.transactionService.GetTransaction(ctx, id)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrorResponse(c, http.StatusNotFound, "Transaction not found")
 		}
 		h.logger.ErrorContext(ctx, "failed to get transaction", "error", err, "id", id)

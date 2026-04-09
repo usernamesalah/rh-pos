@@ -1,21 +1,22 @@
 package middleware
 
 import (
+	"crypto/subtle"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/usernamesalah/rh-pos/internal/config"
 )
 
-// AdminAuth is a middleware that checks for Basic Auth credentials and sets tenant_id
+// AdminAuth is a middleware that checks for Basic Auth credentials.
+// Uses constant-time comparison to prevent timing attacks.
 func AdminAuth(cfg *config.Config) echo.MiddlewareFunc {
 	return middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
-		// Check admin credentials
-		if username != cfg.Admin.Username || password != cfg.Admin.Password {
+		usernameMatch := subtle.ConstantTimeCompare([]byte(username), []byte(cfg.Admin.Username))
+		passwordMatch := subtle.ConstantTimeCompare([]byte(password), []byte(cfg.Admin.Password))
+		if usernameMatch != 1 || passwordMatch != 1 {
 			return false, nil
 		}
-
-		// Set tenant_id to 0 for admin operations (super admin)
-		c.Set("tenant_id", uint(0))
 		return true, nil
 	})
 }

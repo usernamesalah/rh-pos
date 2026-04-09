@@ -5,27 +5,32 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"path"
 	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 )
+
+const maxDownloadSize = 10 << 20 // 10 MB
 
 // Client implements the StorageClient interface for MinIO
 type Client struct {
 	client *minio.Client
 	config *Config
+	logger *slog.Logger
 }
 
 // NewClient creates a new MinIO client with the given configuration
-func NewClient(config *Config) (*Client, error) {
+func NewClient(config *Config, logger *slog.Logger) (*Client, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config is required")
 	}
 
-	fmt.Printf("Initializing MinIO client with endpoint: %s, bucket: %s\n", config.Endpoint, config.Bucket)
+	logger.Info("initializing MinIO client", "endpoint", config.Endpoint, "bucket", config.Bucket)
 
 	// Create MinIO client
 	minioClient, err := minio.New(config.Endpoint, &minio.Options{
@@ -42,28 +47,27 @@ func NewClient(config *Config) (*Client, error) {
 		return nil, fmt.Errorf("failed to check if bucket exists: %w", err)
 	}
 
-	fmt.Printf("Bucket %s exists: %v\n", config.Bucket, exists)
+	logger.Info("bucket check", "bucket", config.Bucket, "exists", exists)
 
 	// Create bucket if it doesn't exist
 	if !exists {
-		fmt.Printf("Creating bucket %s\n", config.Bucket)
+		logger.Info("creating bucket", "bucket", config.Bucket)
 		err = minioClient.MakeBucket(context.Background(), config.Bucket, minio.MakeBucketOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create bucket: %w", err)
 		}
 	}
 
-	client := &Client{
+	return &Client{
 		client: minioClient,
 		config: config,
-	}
-
-	return client, nil
+		logger: logger,
+	}, nil
 }
 
 // getTenantIDFromContext extracts and hashes the tenant ID from context
 func (c *Client) getTenantIDFromContext(ctx context.Context) (string, error) {
-	tenantID, ok := ctx.Value("tenant_id").(uint)
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
 	if !ok {
 		return "", fmt.Errorf("tenant ID not found in context")
 	}
@@ -116,7 +120,8 @@ func (c *Client) Download(ctx context.Context, key string) (io.ReadCloser, error
 	return object, nil
 }
 
-// DownloadBytes downloads an object from MinIO and returns its contents as bytes
+// DownloadBytes downloads an object from MinIO and returns its contents as bytes.
+// Returns an error if the object exceeds maxDownloadSize (10 MB).
 func (c *Client) DownloadBytes(ctx context.Context, key string) ([]byte, error) {
 	reader, err := c.Download(ctx, key)
 	if err != nil {
@@ -124,7 +129,16 @@ func (c *Client) DownloadBytes(ctx context.Context, key string) ([]byte, error) 
 	}
 	defer reader.Close()
 
-	return io.ReadAll(reader)
+	limited := io.LimitReader(reader, maxDownloadSize+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object: %w", err)
+	}
+	if int64(len(data)) > maxDownloadSize {
+		return nil, fmt.Errorf("object exceeds maximum allowed size of %d bytes", maxDownloadSize)
+	}
+
+	return data, nil
 }
 
 // Delete deletes an object from MinIO
@@ -182,10 +196,9 @@ func (c *Client) GeneratePresignedURL(ctx context.Context, key string, expiry ti
 		return "", NewStorageError("presign", key, err)
 	}
 
-	fmt.Printf("Generating presigned URL for key: %s, isUpload: %v\n", objectKey, isUpload)
+	c.logger.DebugContext(ctx, "generating presigned URL", "key", objectKey, "is_upload", isUpload)
 
 	if isUpload {
-		// Generate presigned URL for download
 		presignedURL, err := c.client.PresignedPutObject(ctx, c.config.Bucket, objectKey, expiry)
 		if err != nil {
 			return "", NewStorageError("presign", key, err)
@@ -193,7 +206,6 @@ func (c *Client) GeneratePresignedURL(ctx context.Context, key string, expiry ti
 		return presignedURL.String(), nil
 	}
 
-	// Generate presigned URL for download
 	presignedURL, err := c.client.PresignedGetObject(ctx, c.config.Bucket, objectKey, expiry, nil)
 	if err != nil {
 		return "", NewStorageError("presign", key, err)

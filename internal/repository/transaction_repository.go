@@ -2,12 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"gorm.io/gorm"
 )
 
@@ -40,9 +42,14 @@ func (r *transactionRepository) Create(ctx context.Context, transaction *entitie
 func (r *transactionRepository) GetByID(ctx context.Context, id uint) (*entities.Transaction, error) {
 	r.logger.InfoContext(ctx, "getting transaction by ID", "id", id)
 
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("tenant_id not found in context")
+	}
+
 	var transaction entities.Transaction
-	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("id = ? AND tenant_id = ?", id, ctx.Value("tenant_id")).First(&transaction).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("id = ? AND tenant_id = ?", id, tenantID).First(&transaction).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("transaction not found: %w", err)
 		}
 		r.logger.ErrorContext(ctx, "failed to get transaction", "error", err, "id", id)
@@ -56,18 +63,21 @@ func (r *transactionRepository) GetByID(ctx context.Context, id uint) (*entities
 func (r *transactionRepository) List(ctx context.Context, page, limit int) ([]entities.Transaction, int64, error) {
 	r.logger.InfoContext(ctx, "listing transactions", "page", page, "limit", limit)
 
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return nil, 0, fmt.Errorf("tenant_id not found in context")
+	}
+
 	var transactions []entities.Transaction
 	var total int64
 
-	// Count total transactions
-	if err := r.db.WithContext(ctx).Model(&entities.Transaction{}).Where("tenant_id = ?", ctx.Value("tenant_id")).Count(&total).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&entities.Transaction{}).Where("tenant_id = ?", tenantID).Count(&total).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to count transactions", "error", err)
 		return nil, 0, fmt.Errorf("failed to count transactions: %w", err)
 	}
 
-	// Get transactions with pagination
 	offset := (page - 1) * limit
-	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("tenant_id = ?", ctx.Value("tenant_id")).Offset(offset).Limit(limit).Find(&transactions).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Items.Product").Where("tenant_id = ?", tenantID).Offset(offset).Limit(limit).Find(&transactions).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to list transactions", "error", err)
 		return nil, 0, fmt.Errorf("failed to list transactions: %w", err)
 	}
@@ -79,10 +89,15 @@ func (r *transactionRepository) List(ctx context.Context, page, limit int) ([]en
 func (r *transactionRepository) GetReportData(ctx context.Context, startDate, endDate time.Time) ([]interfaces.ReportDetail, error) {
 	r.logger.InfoContext(ctx, "getting report data", "start_date", startDate, "end_date", endDate)
 
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("tenant_id not found in context")
+	}
+
 	var reportDetails []interfaces.ReportDetail
 
 	query := `
-		SELECT 
+		SELECT
 			ti.product_id,
 			p.name as product_name,
 			SUM(ti.quantity) as total,
@@ -95,7 +110,7 @@ func (r *transactionRepository) GetReportData(ctx context.Context, startDate, en
 		ORDER BY total_price DESC
 	`
 
-	if err := r.db.WithContext(ctx).Raw(query, startDate, endDate, ctx.Value("tenant_id")).Scan(&reportDetails).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(query, startDate, endDate, tenantID).Scan(&reportDetails).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to get report data", "error", err)
 		return nil, fmt.Errorf("failed to get report data: %w", err)
 	}
@@ -103,10 +118,33 @@ func (r *transactionRepository) GetReportData(ctx context.Context, startDate, en
 	return reportDetails, nil
 }
 
+// GetTransactionCount returns the number of distinct transactions in a date range for the tenant.
+func (r *transactionRepository) GetTransactionCount(ctx context.Context, startDate, endDate time.Time) (int64, error) {
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return 0, fmt.Errorf("tenant_id not found in context")
+	}
+
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&entities.Transaction{}).
+		Where("created_at BETWEEN ? AND ? AND tenant_id = ?", startDate, endDate, tenantID).
+		Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("failed to count transactions: %w", err)
+	}
+
+	return count, nil
+}
+
 // Delete deletes a transaction
 func (r *transactionRepository) Delete(ctx context.Context, id uint) error {
 	r.logger.InfoContext(ctx, "deleting transaction", "id", id)
-	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, ctx.Value("tenant_id")).Delete(&entities.Transaction{}).Error; err != nil {
+
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return fmt.Errorf("tenant_id not found in context")
+	}
+
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, tenantID).Delete(&entities.Transaction{}).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to delete transaction", "error", err, "id", id)
 		return fmt.Errorf("failed to delete transaction: %w", err)
 	}
@@ -116,7 +154,13 @@ func (r *transactionRepository) Delete(ctx context.Context, id uint) error {
 // Update updates a transaction
 func (r *transactionRepository) Update(ctx context.Context, transaction *entities.Transaction) error {
 	r.logger.InfoContext(ctx, "updating transaction", "id", transaction.ID)
-	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", transaction.ID, ctx.Value("tenant_id")).Save(transaction).Error; err != nil {
+
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return fmt.Errorf("tenant_id not found in context")
+	}
+
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", transaction.ID, tenantID).Save(transaction).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to update transaction", "error", err, "id", transaction.ID)
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}

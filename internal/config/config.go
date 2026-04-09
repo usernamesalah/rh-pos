@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -16,12 +17,14 @@ type Config struct {
 	Logger   LoggerConfig
 	Admin    AdminConfig
 	MinIO    MinIOConfig
+	Hash     HashConfig
 }
 
 // ServerConfig holds server configuration
 type ServerConfig struct {
-	Port string
-	Host string
+	Port           string
+	Host           string
+	AllowedOrigins []string
 }
 
 // DatabaseConfig holds database configuration
@@ -61,6 +64,11 @@ type MinIOConfig struct {
 	DefaultExpiry   time.Duration
 }
 
+// HashConfig holds hash ID configuration
+type HashConfig struct {
+	Salt string
+}
+
 // Load loads configuration from .env file and environment variables
 func Load() (*Config, error) {
 	// Load .env file if it exists (ignore error if file doesn't exist)
@@ -69,10 +77,13 @@ func Load() (*Config, error) {
 		fmt.Printf("Warning: Could not load .env file: %v\n", err)
 	}
 
+	allowedOrigins := strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"), ",")
+
 	config := &Config{
 		Server: ServerConfig{
-			Port: getEnv("SERVER_PORT", "8080"),
-			Host: getEnv("SERVER_HOST", "0.0.0.0"),
+			Port:           getEnv("SERVER_PORT", "8080"),
+			Host:           getEnv("SERVER_HOST", "0.0.0.0"),
+			AllowedOrigins: allowedOrigins,
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -98,7 +109,10 @@ func Load() (*Config, error) {
 			UseSSL:          getEnv("MINIO_USE_SSL", "false") == "true",
 			Region:          getEnv("MINIO_REGION", "us-east-1"),
 			Bucket:          getEnv("MINIO_BUCKET", "rh-pos"),
-			DefaultExpiry:   time.Hour * 1, // 24 hours default expiry
+			DefaultExpiry:   time.Hour * 1, // 1 hour default expiry
+		},
+		Hash: HashConfig{
+			Salt: getEnv("HASHID_SALT", ""),
 		},
 	}
 
@@ -118,6 +132,14 @@ func Load() (*Config, error) {
 	// Validate MinIO configuration
 	if config.MinIO.AccessKeyID == "" || config.MinIO.SecretAccessKey == "" {
 		return nil, fmt.Errorf("MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required")
+	}
+
+	// Validate HashID salt
+	if config.Hash.Salt == "" {
+		return nil, fmt.Errorf("HASHID_SALT is required (min 16 characters)")
+	}
+	if len(config.Hash.Salt) < 16 {
+		return nil, fmt.Errorf("HASHID_SALT must be at least 16 characters")
 	}
 
 	// Construct DSN

@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/usernamesalah/rh-pos/internal/domain/apperrors"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
 	"gorm.io/gorm"
 )
@@ -96,10 +98,13 @@ func (h *AuthHandler) Login(c echo.Context) error {
 // @Failure 401 {object} Response
 // @Router /api/profile [get]
 func (h *AuthHandler) GetProfile(c echo.Context) error {
-	userID := c.Get("user_id").(uint)
-	user, err := h.authService.GetUserByID(c.Request().Context(), userID)
+	userIDRaw, ok := c.Get("user_id").(uint)
+	if !ok {
+		return ErrorResponse(c, http.StatusUnauthorized, "Invalid token claims")
+	}
+	user, err := h.authService.GetUserByID(c.Request().Context(), userIDRaw)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrorResponse(c, http.StatusNotFound, "User not found")
 		}
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get profile")
@@ -199,21 +204,20 @@ func (h *AuthHandler) UpdatePassword(c echo.Context) error {
 	}
 
 	// Get user ID from context (set by JWT middleware)
-	userID := c.Get("user_id").(uint)
+	userID, ok := c.Get("user_id").(uint)
+	if !ok {
+		return ErrorResponse(c, http.StatusUnauthorized, "Invalid token claims")
+	}
 
 	// Update password
 	if err := h.authService.UpdatePassword(c.Request().Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
 		h.logger.ErrorContext(c.Request().Context(), "failed to update password", "error", err, "user_id", userID)
 
-		// Return specific error messages
-		if err.Error() == "invalid current password" {
+		if errors.Is(err, apperrors.ErrInvalidPassword) {
 			return ErrorResponse(c, http.StatusUnauthorized, "Invalid current password")
 		}
-		if err.Error() == "user not found" {
-			return ErrorResponse(c, http.StatusNotFound, "User not found")
-		}
 
-		return ErrorResponse(c, http.StatusInternalServerError, "Failed to update password")
+		return ErrorResponse(c, http.StatusBadRequest, "Failed to update password")
 	}
 
 	return SuccessResponse(c, http.StatusOK, "Password updated successfully", nil)

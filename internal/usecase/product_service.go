@@ -9,6 +9,7 @@ import (
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
 	"github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
 )
@@ -64,12 +65,6 @@ func (s *productService) ListProducts(ctx context.Context, page, limit int) ([]e
 func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error) {
 	s.logger.InfoContext(ctx, "updating product", "id", id)
 
-	// Get tenant_id from context
-	tenantID, ok := ctx.Value("tenant_id").(uint)
-	if !ok {
-		return nil, fmt.Errorf("tenant_id not found in context")
-	}
-
 	// Get existing product
 	product, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
@@ -94,9 +89,6 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 		}
 	}
 
-	// Ensure tenant_id is set
-	product.TenantID = &tenantID
-
 	// Save changes
 	if err := s.productRepo.Update(ctx, product); err != nil {
 		return nil, fmt.Errorf("failed to update product: %w", err)
@@ -109,12 +101,6 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 func (s *productService) UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error) {
 	s.logger.InfoContext(ctx, "updating product stock", "id", id, "stock", stock)
 
-	// Get tenant_id from context
-	tenantID, ok := ctx.Value("tenant_id").(uint)
-	if !ok {
-		return nil, fmt.Errorf("tenant_id not found in context")
-	}
-
 	// Get existing product
 	product, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
@@ -123,7 +109,6 @@ func (s *productService) UpdateStock(ctx context.Context, id uint, stock int) (*
 
 	// Update stock
 	product.Stock = stock
-	product.TenantID = &tenantID
 
 	// Save changes
 	if err := s.productRepo.Update(ctx, product); err != nil {
@@ -138,7 +123,7 @@ func (s *productService) CreateProduct(ctx context.Context, product *entities.Pr
 	s.logger.InfoContext(ctx, "creating product", "sku", product.SKU)
 
 	// Get tenant_id from context
-	tenantID, ok := ctx.Value("tenant_id").(uint)
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
 	if !ok {
 		return fmt.Errorf("tenant_id not found in context")
 	}
@@ -175,30 +160,24 @@ func (s *productService) GetProductImageURL(ctx context.Context, product *entiti
 	return url, nil
 }
 
-// GetProductUploadURL generates a presigned PUT URL for uploading a product image
-func (s *productService) GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (string, error) {
+// GetProductUploadURL generates a presigned PUT URL for uploading a product image.
+// The image key is returned but NOT persisted — the caller must update the product
+// with the key only after confirming a successful upload.
+func (s *productService) GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (uploadURL string, imageKey string, err error) {
 	if product == nil {
-		return "", fmt.Errorf("product is required")
+		return "", "", fmt.Errorf("product is required")
 	}
 
 	// Generate image key
 	key := storage.GenerateImageKey(product.ID, ext)
 
-	// Generate presigned URL with 15 minutes expiry
+	// Generate presigned PUT URL with 15 minutes expiry
 	url, err := s.storage.GeneratePresignedURL(ctx, key, 15*time.Minute, true)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
+		return "", "", fmt.Errorf("failed to generate presigned URL: %w", err)
 	}
 
-	// Update product with new image key
-	updates := map[string]interface{}{
-		"image": key,
-	}
-	if _, err := s.UpdateProduct(ctx, product.ID, updates); err != nil {
-		return "", fmt.Errorf("failed to update product with image key: %w", err)
-	}
-
-	return url, nil
+	return url, key, nil
 }
 
 // UploadProductImage uploads a product image directly to MinIO
