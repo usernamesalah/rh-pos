@@ -492,6 +492,9 @@ export const transactionsApi = {
     paymentMethod: string
     notes?: string
     cashier: string
+    customer_name?: string
+    customer_email?: string
+    customer_phone?: string
   }) => {
     try {
       const token = localStorage.getItem("authToken")
@@ -514,6 +517,9 @@ export const transactionsApi = {
         payment_method: transaction.paymentMethod,
         notes: transaction.notes || "",
         user: transaction.user || transaction.cashier, // Use user if provided, otherwise use cashier
+        customer_name: transaction.customer_name || undefined,
+        customer_email: transaction.customer_email || undefined,
+        customer_phone: transaction.customer_phone || undefined,
       }
 
       const response = await fetch(`${API_BASE_URL}/api/transactions`, {
