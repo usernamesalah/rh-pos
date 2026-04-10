@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -12,13 +13,15 @@ import (
 
 type discountCampaignService struct {
 	campaignRepo interfaces.DiscountCampaignRepository
+	auditRepo    interfaces.AuditLogRepository
 	logger       *slog.Logger
 }
 
 // NewDiscountCampaignService creates a new discount campaign service
-func NewDiscountCampaignService(campaignRepo interfaces.DiscountCampaignRepository, logger *slog.Logger) interfaces.DiscountCampaignService {
+func NewDiscountCampaignService(campaignRepo interfaces.DiscountCampaignRepository, auditRepo interfaces.AuditLogRepository, logger *slog.Logger) interfaces.DiscountCampaignService {
 	return &discountCampaignService{
 		campaignRepo: campaignRepo,
+		auditRepo:    auditRepo,
 		logger:       logger,
 	}
 }
@@ -74,11 +77,16 @@ func (s *discountCampaignService) List(ctx context.Context, page, limit int) ([]
 	return s.campaignRepo.List(ctx, page, limit)
 }
 
-// Update updates a campaign
+// Update updates a campaign and writes an audit log entry.
 func (s *discountCampaignService) Update(ctx context.Context, id uint, req interfaces.UpdateCampaignRequest) (*entities.DiscountCampaign, error) {
 	campaign, err := s.campaignRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	beforeJSON, err := json.Marshal(campaign)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal before state: %w", err)
 	}
 
 	if req.Name != nil {
@@ -105,12 +113,40 @@ func (s *discountCampaignService) Update(ctx context.Context, id uint, req inter
 		return nil, err
 	}
 
-	return s.campaignRepo.GetByID(ctx, id)
+	updated, err := s.campaignRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	afterJSON, err := json.Marshal(updated)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal after state: %w", err)
+	}
+
+	s.writeAuditLog(ctx, id, "update", beforeJSON, afterJSON)
+
+	return updated, nil
 }
 
-// Delete deletes a campaign
+// Delete deletes a campaign and writes an audit log entry.
 func (s *discountCampaignService) Delete(ctx context.Context, id uint) error {
-	return s.campaignRepo.Delete(ctx, id)
+	campaign, err := s.campaignRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	beforeJSON, err := json.Marshal(campaign)
+	if err != nil {
+		return fmt.Errorf("failed to marshal before state: %w", err)
+	}
+
+	if err := s.campaignRepo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	s.writeAuditLog(ctx, id, "delete", beforeJSON, nil)
+
+	return nil
 }
 
 // AddProducts adds products to a campaign
@@ -127,4 +163,29 @@ func (s *discountCampaignService) RemoveProduct(ctx context.Context, campaignID 
 		return err
 	}
 	return s.campaignRepo.RemoveProduct(ctx, campaignID, productID)
+}
+
+// writeAuditLog writes an audit log entry. Errors are logged but do not fail the main operation.
+func (s *discountCampaignService) writeAuditLog(ctx context.Context, entityID uint, action string, before, after json.RawMessage) {
+	tenantID, _ := ctxkey.TenantIDFromContext(ctx)
+	userID, _ := ctxkey.UserIDFromContext(ctx)
+
+	entry := &entities.AuditLog{
+		TenantID:    tenantID,
+		UserID:      userID,
+		EntityType:  "discount_campaign",
+		EntityID:    entityID,
+		Action:      action,
+		BeforeState: before,
+		AfterState:  after,
+	}
+
+	if err := s.auditRepo.Create(ctx, entry); err != nil {
+		s.logger.ErrorContext(ctx, "failed to write audit log",
+			"entity_type", "discount_campaign",
+			"entity_id", entityID,
+			"action", action,
+			"error", err,
+		)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
@@ -16,14 +17,16 @@ import (
 type productService struct {
 	productRepo interfaces.ProductRepository
 	storage     storage.StorageClient
+	baseURL     string
 	logger      *slog.Logger
 }
 
 // NewProductService creates a new product service
-func NewProductService(productRepo interfaces.ProductRepository, storage storage.StorageClient, logger *slog.Logger) interfaces.ProductService {
+func NewProductService(productRepo interfaces.ProductRepository, storage storage.StorageClient, baseURL string, logger *slog.Logger) interfaces.ProductService {
 	return &productService{
 		productRepo: productRepo,
 		storage:     storage,
+		baseURL:     baseURL,
 		logger:      logger,
 	}
 }
@@ -150,10 +153,13 @@ func (s *productService) GetProductImageURL(ctx context.Context, product *entiti
 		return "", nil
 	}
 
-	// Generate presigned GET URL with 1 hour expiry
 	url, err := s.storage.GeneratePresignedURL(ctx, product.Image, time.Hour, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate image URL: %w", err)
+	}
+
+	if s.baseURL != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = s.baseURL + url
 	}
 
 	return url, nil

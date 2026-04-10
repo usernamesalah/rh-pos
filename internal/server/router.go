@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
 	echoSwagger "github.com/swaggo/echo-swagger"
+	"github.com/usernamesalah/rh-pos/docs"
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
 	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
@@ -54,6 +55,7 @@ func SetupRouter(
 
 	// Swagger documentation
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
+	docs.RegisterSwaggerHandlers(e)
 
 	// Health check
 	e.GET("/health", func(c echo.Context) error {
@@ -61,6 +63,11 @@ func SetupRouter(
 			"status": "ok",
 		})
 	})
+
+	// Static file server for local storage
+	if cfg.Storage.Type == "local" {
+		e.Static("/files", cfg.Storage.LocalPath)
+	}
 
 	// Auth routes
 	auth := e.Group("/auth")
@@ -92,6 +99,13 @@ func SetupRouter(
 			}
 			userID := uint(userIDFloat)
 			c.Set("user_id", userID)
+			ctx := context.WithValue(c.Request().Context(), ctxkey.UserID, userID)
+			c.SetRequest(c.Request().WithContext(ctx))
+
+			// Safe role extraction
+			if role, ok := claims["role"].(string); ok {
+				c.Set("role", role)
+			}
 
 			// Safely handle tenant_id claim
 			if tenantIDRaw, ok := claims["tenant_id"]; ok {
@@ -116,37 +130,43 @@ func SetupRouter(
 	api.GET("/profile", authHandler.GetProfile)
 	api.GET("/my-tenant", authHandler.GetMyTenant)
 	api.PUT("/update-password", authHandler.UpdatePassword)
+	api.GET("/users", authHandler.ListUsers)
+	api.POST("/users", authHandler.CreateUser)
+	api.GET("/users/:id", authHandler.GetUser)
+	api.PUT("/users/:id", authHandler.UpdateUser)
+	api.DELETE("/users/:id", authHandler.DeleteUser)
 
-	// Product routes
+	// Product routes — read access for all roles, write access for admin only
 	products := api.Group("/products")
 	products.GET("", productHandler.ListProducts)
-	products.POST("", productHandler.CreateProduct)
 	products.GET("/:id", productHandler.GetProduct)
-	products.PUT("/:id", productHandler.UpdateProduct)
-	products.PUT("/:id/stock", productHandler.UpdateStock)
-	products.POST("/:id/upload-url", productHandler.GetUploadURL)
 	products.GET("/:id/image/bytes", productHandler.GetProductImageBytes)
-	products.POST("/:id/image", productHandler.UploadProductImage)
+	products.POST("", productHandler.CreateProduct, adminMiddleware.AdminOnly)
+	products.PUT("/:id", productHandler.UpdateProduct, adminMiddleware.AdminOnly)
+	products.PUT("/:id/stock", productHandler.UpdateStock, adminMiddleware.AdminOnly)
+	products.POST("/:id/upload-url", productHandler.GetUploadURL, adminMiddleware.AdminOnly)
+	products.POST("/:id/image", productHandler.UploadProductImage, adminMiddleware.AdminOnly)
 
-	// Transaction routes
+	// Transaction routes — cashier and admin
 	transactions := api.Group("/transactions")
 	transactions.POST("", transactionHandler.CreateTransaction)
 	transactions.GET("", transactionHandler.ListTransactions)
 	transactions.GET("/:id", transactionHandler.GetTransaction)
 
-	// Report routes
+	// Report routes — admin only
 	reports := api.Group("/reports")
+	reports.Use(adminMiddleware.AdminOnly)
 	reports.GET("", reportHandler.GetSalesReport)
 
-	// Discount campaign routes (JWT protected)
+	// Discount campaign routes — read for all authenticated, write for admin only
 	campaigns := api.Group("/discount-campaigns")
-	campaigns.POST("", campaignHandler.CreateCampaign)
 	campaigns.GET("", campaignHandler.ListCampaigns)
 	campaigns.GET("/:id", campaignHandler.GetCampaign)
-	campaigns.PUT("/:id", campaignHandler.UpdateCampaign)
-	campaigns.DELETE("/:id", campaignHandler.DeleteCampaign)
-	campaigns.POST("/:id/products", campaignHandler.AddProducts)
-	campaigns.DELETE("/:id/products/:product_id", campaignHandler.RemoveProduct)
+	campaigns.POST("", campaignHandler.CreateCampaign, adminMiddleware.AdminOnly)
+	campaigns.PUT("/:id", campaignHandler.UpdateCampaign, adminMiddleware.AdminOnly)
+	campaigns.DELETE("/:id", campaignHandler.DeleteCampaign, adminMiddleware.AdminOnly)
+	campaigns.POST("/:id/products", campaignHandler.AddProducts, adminMiddleware.AdminOnly)
+	campaigns.DELETE("/:id/products/:product_id", campaignHandler.RemoveProduct, adminMiddleware.AdminOnly)
 
 	// Public warranty routes (no auth required)
 	warranty := e.Group("/warranty")

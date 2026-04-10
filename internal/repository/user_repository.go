@@ -100,22 +100,30 @@ func (r *userRepository) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-// List retrieves all users
-func (r *userRepository) List(ctx context.Context) ([]*entities.User, error) {
-	r.logger.InfoContext(ctx, "listing users")
+// List retrieves all users with pagination
+func (r *userRepository) List(ctx context.Context, page, limit int) ([]*entities.User, int64, error) {
+	r.logger.InfoContext(ctx, "listing users", "page", page, "limit", limit)
 
 	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
 	if !ok {
-		return nil, fmt.Errorf("tenant_id not found in context")
+		return nil, 0, fmt.Errorf("tenant_id not found in context")
 	}
 
 	var users []*entities.User
-	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Find(&users).Error; err != nil {
+	offset := (page - 1) * limit
+
+	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Offset(offset).Limit(limit).Find(&users).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to list users", "error", err)
-		return nil, fmt.Errorf("failed to list users: %w", err)
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
 	}
 
-	return users, nil
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&entities.User{}).Where("tenant_id = ?", tenantID).Count(&total).Error; err != nil {
+		r.logger.ErrorContext(ctx, "failed to count users", "error", err)
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	return users, total, nil
 }
 
 // Update updates a user

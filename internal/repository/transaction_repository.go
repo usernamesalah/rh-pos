@@ -28,7 +28,7 @@ func NewTransactionRepository(db *gorm.DB, logger *slog.Logger) interfaces.Trans
 
 // Create creates a new transaction
 func (r *transactionRepository) Create(ctx context.Context, transaction *entities.Transaction) error {
-	r.logger.InfoContext(ctx, "creating transaction", "user", transaction.User)
+	r.logger.InfoContext(ctx, "creating transaction", "user_id", transaction.UserID)
 
 	if err := r.db.WithContext(ctx).Create(transaction).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to create transaction", "error", err)

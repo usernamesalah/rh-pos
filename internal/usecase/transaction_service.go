@@ -32,7 +32,7 @@ func NewTransactionService(transactionRepo interfaces.TransactionRepository, pro
 
 // CreateTransaction creates a new transaction with database transaction support
 func (s *transactionService) CreateTransaction(ctx context.Context, req interfaces.CreateTransactionRequest) (*entities.Transaction, error) {
-	s.logger.InfoContext(ctx, "creating transaction", "user", req.User)
+	s.logger.InfoContext(ctx, "creating transaction", "user_id", req.UserID)
 
 	// Validate request
 	if len(req.Items) == 0 {
@@ -51,7 +51,7 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 
 		// Create transaction entity
 		transaction := &entities.Transaction{
-			User:          req.User,
+			UserID:        &req.UserID,
 			PaymentMethod: req.PaymentMethod,
 			Discount:      req.Discount,
 			Notes:         req.Notes,

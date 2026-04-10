@@ -4,12 +4,17 @@ import (
 	"time"
 )
 
+const (
+	RoleAdmin   = "admin"
+	RoleCashier = "cashier"
+)
+
 // User represents a user in the system
 type User struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
 	Username  string    `json:"username" gorm:"uniqueIndex;not null"`
 	Password  string    `json:"-" gorm:"not null"`
-	Role      string    `json:"role" gorm:"not null;default:'user'"`
+	Role      string    `json:"role" gorm:"not null;default:'cashier'"`
 	TenantID  *uint     `json:"tenant_id" gorm:"index"`
 	Tenant    *Tenant   `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
 	CreatedAt time.Time `json:"created_at"`

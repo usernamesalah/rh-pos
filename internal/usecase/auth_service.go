@@ -139,6 +139,10 @@ func (s *authService) GetUserByID(ctx context.Context, id uint) (*entities.User,
 func (s *authService) CreateUser(ctx context.Context, user *entities.User) error {
 	s.logger.InfoContext(ctx, "creating user", "username", user.Username)
 
+	if user.Role == "" {
+		user.Role = entities.RoleCashier
+	}
+
 	// Hash password
 	hashedPassword, err := s.HashPassword(user.Password)
 	if err != nil {
@@ -188,5 +192,42 @@ func (s *authService) UpdatePassword(ctx context.Context, userID uint, currentPa
 	}
 
 	s.logger.InfoContext(ctx, "password updated successfully", "user_id", userID)
+	return nil
+}
+
+// ListUsers retrieves all users with pagination
+func (s *authService) ListUsers(ctx context.Context, page, limit int) ([]*entities.User, int64, error) {
+	s.logger.InfoContext(ctx, "listing users", "page", page, "limit", limit)
+	users, total, err := s.userRepo.List(ctx, page, limit)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to list users", "error", err)
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+	return users, total, nil
+}
+
+// UpdateUser updates an existing user
+func (s *authService) UpdateUser(ctx context.Context, user *entities.User) error {
+	s.logger.InfoContext(ctx, "updating user", "id", user.ID)
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		s.logger.ErrorContext(ctx, "failed to update user", "error", err, "id", user.ID)
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "user updated successfully", "id", user.ID)
+	return nil
+}
+
+// DeleteUser deletes a user by ID
+func (s *authService) DeleteUser(ctx context.Context, id uint) error {
+	s.logger.InfoContext(ctx, "deleting user", "id", id)
+
+	if err := s.userRepo.Delete(ctx, id); err != nil {
+		s.logger.ErrorContext(ctx, "failed to delete user", "error", err, "id", id)
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "user deleted successfully", "id", id)
 	return nil
 }

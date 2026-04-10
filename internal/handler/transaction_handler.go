@@ -29,7 +29,6 @@ func NewTransactionHandler(transactionService interfaces.TransactionService, log
 // CreateTransactionRequest represents the create transaction request
 type CreateTransactionRequest struct {
 	Items         []TransactionItemRequest `json:"items" validate:"required,min=1"`
-	User          string                   `json:"user" validate:"required"`
 	PaymentMethod string                   `json:"payment_method" validate:"required"`
 	Discount      float64                  `json:"discount"`
 	TotalPrice    float64                  `json:"total_price"`
@@ -57,7 +56,7 @@ type TransactionItemRequest struct {
 // @Success 201 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
-// @Router /transactions [post]
+// @Router /api/transactions [post]
 func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -72,9 +71,15 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
 	}
 
+	// Get user_id from JWT context
+	userID, ok := c.Get("user_id").(uint)
+	if !ok {
+		return ErrorResponse(c, http.StatusUnauthorized, "Invalid token claims")
+	}
+
 	// Convert to service request
 	serviceReq := interfaces.CreateTransactionRequest{
-		User:          req.User,
+		UserID:        userID,
 		PaymentMethod: req.PaymentMethod,
 		Discount:      req.Discount,
 		TotalPrice:    req.TotalPrice,
@@ -119,7 +124,7 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 // @Param limit query int false "Items per page" default(10)
 // @Success 200 {object} Response{data=[]HashIDResponse}
 // @Failure 401 {object} Response
-// @Router /transactions [get]
+// @Router /api/transactions [get]
 func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -157,7 +162,7 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 // @Success 200 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /transactions/{id} [get]
+// @Router /api/transactions/{id} [get]
 func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -213,12 +218,23 @@ func formatTransactionItems(items []entities.TransactionItem) []map[string]inter
 func formatTransaction(t *entities.Transaction) HashIDResponse {
 	data := map[string]interface{}{
 		"items":          formatTransactionItems(t.Items),
-		"user":           t.User,
 		"payment_method": t.PaymentMethod,
 		"discount":       t.Discount,
 		"total_price":    t.TotalPrice,
 		"notes":          t.Notes,
 	}
+
+	// Include user info if available
+	if t.UserID != nil {
+		data["user_id"] = hash.HashID(*t.UserID)
+	}
+	if t.User != nil {
+		data["user"] = map[string]interface{}{
+			"id":       hash.HashID(t.User.ID),
+			"username": t.User.Username,
+		}
+	}
+
 	if t.CustomerName != nil {
 		data["customer_name"] = *t.CustomerName
 	}

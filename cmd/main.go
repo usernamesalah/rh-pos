@@ -1,7 +1,23 @@
+// @title RH POS API
+// @version 1.0
+// @description Point of Sale system API with multi-tenant support, product management, transactions, discount campaigns, warranty tracking, and sales reporting.
+
+// @host localhost:8080
+// @BasePath /
+
+// @securityDefinitions.apikey bearerAuth
+// @in header
+// @name Authorization
+// @description JWT Bearer token. Format: "Bearer {token}"
+
+// @securityDefinitions.basic basicAuth
+// @description Basic Auth for admin endpoints
+
 package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"log/slog"
@@ -11,6 +27,9 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/pressly/goose/v3"
+	_ "github.com/usernamesalah/rh-pos/docs"
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
@@ -26,11 +45,18 @@ import (
 )
 
 func main() {
-
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Handle migrate subcommand: ./bin/rh-pos migrate [up|down|status|...]
+	if len(os.Args) >= 2 && os.Args[1] == "migrate" {
+		if err := runMigrations(cfg); err != nil {
+			log.Fatalf("migration failed: %v", err)
+		}
+		return
 	}
 
 	// Initialize logger
@@ -71,14 +97,24 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	transactionRepo := repository.NewTransactionRepository(db, appLogger)
 	tenantRepo := repository.NewTenantRepository(db, appLogger)
 	campaignRepo := repository.NewDiscountCampaignRepository(db, appLogger)
+	auditLogRepo := repository.NewAuditLogRepository(db, appLogger)
+
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	storageBaseURL := os.Getenv("STORAGE_BASE_URL")
+	if storageBaseURL == "" {
+		storageBaseURL = "http://localhost:" + port
+	}
 
 	// Initialize use cases
 	authUseCase := usecase.NewAuthService(userRepo, cfg.JWT.Secret, appLogger)
-	productUseCase := usecase.NewProductService(productRepo, storageClient, appLogger)
+	productUseCase := usecase.NewProductService(productRepo, storageClient, storageBaseURL, appLogger)
 	transactionUseCase := usecase.NewTransactionService(transactionRepo, productRepo, campaignRepo, db, appLogger)
 	reportUseCase := usecase.NewReportService(transactionRepo, appLogger)
 	tenantUseCase := usecase.NewTenantService(tenantRepo, appLogger)
-	campaignUseCase := usecase.NewDiscountCampaignService(campaignRepo, appLogger)
+	campaignUseCase := usecase.NewDiscountCampaignService(campaignRepo, auditLogRepo, appLogger)
 	warrantyUseCase := usecase.NewWarrantyService(transactionRepo, appLogger)
 
 	// Initialize handlers
@@ -103,11 +139,6 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	)
 
 	// Start server
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = "8080"
-	}
-
 	// Create server with timeouts
 	srv := &http.Server{
 		Addr:         "0.0.0.0:" + port,
@@ -150,6 +181,32 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		}
 	}
 
+	return nil
+}
+
+func runMigrations(cfg *config.Config) error {
+	db, err := sql.Open("mysql", cfg.Database.DSN)
+	if err != nil {
+		return fmt.Errorf("failed to open db for migration: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping db: %w", err)
+	}
+
+	goose.SetDialect("mysql")
+
+	// Default to "up" if no subcommand given
+	command := "up"
+	if len(os.Args) >= 3 {
+		command = os.Args[2]
+	}
+
+	args := os.Args[3:]
+	if err := goose.RunContext(context.Background(), command, db, "migrations", args...); err != nil {
+		return fmt.Errorf("goose %s: %w", command, err)
+	}
 	return nil
 }
 

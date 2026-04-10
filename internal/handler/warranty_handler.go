@@ -25,6 +25,16 @@ func NewWarrantyHandler(warrantyService interfaces.WarrantyService, logger *slog
 }
 
 // CheckWarranty handles GET /warranty/:transaction_id
+// @Summary Check warranty status
+// @Description Check warranty status for a transaction by its hashed ID
+// @Tags Warranty
+// @Produce json
+// @Param transaction_id path string true "Hashed transaction ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Failure 500 {object} Response
+// @Router /warranty/{transaction_id} [get]
 func (h *WarrantyHandler) CheckWarranty(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -49,6 +59,15 @@ func (h *WarrantyHandler) CheckWarranty(c echo.Context) error {
 }
 
 // SearchByPhone handles GET /warranty/search?phone=...
+// @Summary Search warranties by phone number
+// @Description Search warranty records by customer phone number
+// @Tags Warranty
+// @Produce json
+// @Param phone query string true "Customer phone number"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /warranty/search [get]
 func (h *WarrantyHandler) SearchByPhone(c echo.Context) error {
 	ctx := c.Request().Context()
 

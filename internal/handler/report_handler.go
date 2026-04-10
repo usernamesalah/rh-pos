@@ -31,9 +31,9 @@ func NewReportHandler(reportService interfaces.ReportService, logger *slog.Logge
 // @Param start_date query string false "Start date (YYYY-MM-DD)"
 // @Param end_date query string false "End date (YYYY-MM-DD)"
 // @Success 200 {object} interfaces.ReportResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /reports [get]
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/reports [get]
 func (h *ReportHandler) GetSalesReport(c echo.Context) error {
 	ctx := c.Request().Context()
 

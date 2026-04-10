@@ -4,11 +4,14 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/usernamesalah/rh-pos/internal/domain/apperrors"
+	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"gorm.io/gorm"
 )
 
@@ -221,4 +224,254 @@ func (h *AuthHandler) UpdatePassword(c echo.Context) error {
 	}
 
 	return SuccessResponse(c, http.StatusOK, "Password updated successfully", nil)
+}
+
+// ListUsers handles listing users with pagination
+// @Summary List users
+// @Description Get all users for the current tenant with pagination
+// @Tags Users
+// @Produce json
+// @Security bearerAuth
+// @Param page query int false "Page number"
+// @Param limit query int false "Items per page (max 100)"
+// @Success 200 {object} Response
+// @Failure 401 {object} Response
+// @Router /api/users [get]
+func (h *AuthHandler) ListUsers(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	users, total, err := h.authService.ListUsers(ctx, page, limit)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to list users", "error", err)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to list users")
+	}
+
+	items := make([]HashIDResponse, len(users))
+	for i, u := range users {
+		items[i] = WithHashID(
+			u.ID,
+			u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			map[string]interface{}{
+				"username": u.Username,
+				"role":     u.Role,
+			},
+		)
+	}
+
+	return SuccessPaginatedResponse(
+		c,
+		http.StatusOK,
+		"Users retrieved successfully",
+		items,
+		total,
+		page,
+		limit,
+	)
+}
+
+type CreateUserRequest struct {
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password" validate:"required,min=6"`
+	Role     string `json:"role"`
+}
+
+type UpdateUserRequest struct {
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
+// CreateUser handles creating a new user
+// @Summary Create user
+// @Description Create a new user for the current tenant
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param request body CreateUserRequest true "User data"
+// @Success 201 {object} Response
+// @Failure 400 {object} Response
+// @Failure 401 {object} Response
+// @Router /api/users [post]
+func (h *AuthHandler) CreateUser(c echo.Context) error {
+	var req CreateUserRequest
+	if err := c.Bind(&req); err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
+	}
+
+	if err := c.Validate(&req); err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
+	}
+
+	role := req.Role
+	if role == "" {
+		role = "cashier"
+	}
+
+	user := &entities.User{
+		Username: req.Username,
+		Password: req.Password,
+		Role:     role,
+	}
+
+	if err := h.authService.CreateUser(c.Request().Context(), user); err != nil {
+		h.logger.ErrorContext(c.Request().Context(), "failed to create user", "error", err, "username", req.Username)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create user")
+	}
+
+	response := WithHashID(
+		user.ID,
+		user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"username": user.Username,
+			"role":     user.Role,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusCreated, "User created successfully", response)
+}
+
+// GetUser handles getting a user by ID
+// @Summary Get user by ID
+// @Description Get a specific user by ID
+// @Tags Users
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "User ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /api/users/{id} [get]
+func (h *AuthHandler) GetUser(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	hashedID := c.Param("id")
+	id, err := hash.DecodeHashID(hashedID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "invalid user ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	user, err := h.authService.GetUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrorResponse(c, http.StatusNotFound, "User not found")
+		}
+		h.logger.ErrorContext(ctx, "failed to get user", "error", err, "id", id)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get user")
+	}
+
+	response := WithHashID(
+		user.ID,
+		user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"username": user.Username,
+			"role":     user.Role,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusOK, "User retrieved successfully", response)
+}
+
+// UpdateUser handles updating a user
+// @Summary Update user
+// @Description Update an existing user
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "User ID"
+// @Param request body UpdateUserRequest true "User data"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /api/users/{id} [put]
+func (h *AuthHandler) UpdateUser(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	hashedID := c.Param("id")
+	id, err := hash.DecodeHashID(hashedID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "invalid user ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	var req UpdateUserRequest
+	if err := c.Bind(&req); err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
+	}
+
+	user, err := h.authService.GetUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrorResponse(c, http.StatusNotFound, "User not found")
+		}
+		h.logger.ErrorContext(ctx, "failed to get user", "error", err, "id", id)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get user")
+	}
+
+	if req.Username != "" {
+		user.Username = req.Username
+	}
+	if req.Role != "" {
+		user.Role = req.Role
+	}
+
+	if err := h.authService.UpdateUser(ctx, user); err != nil {
+		h.logger.ErrorContext(ctx, "failed to update user", "error", err, "id", id)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to update user")
+	}
+
+	response := WithHashID(
+		user.ID,
+		user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		map[string]interface{}{
+			"username": user.Username,
+			"role":     user.Role,
+		},
+	)
+
+	return SuccessResponse(c, http.StatusOK, "User updated successfully", response)
+}
+
+// DeleteUser handles deleting a user
+// @Summary Delete user
+// @Description Delete a user by ID
+// @Tags Users
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "User ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /api/users/{id} [delete]
+func (h *AuthHandler) DeleteUser(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	hashedID := c.Param("id")
+	id, err := hash.DecodeHashID(hashedID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "invalid user ID format", "error", err, "hashed_id", hashedID)
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	if err := h.authService.DeleteUser(ctx, id); err != nil {
+		h.logger.ErrorContext(ctx, "failed to delete user", "error", err, "id", id)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to delete user")
+	}
+
+	return SuccessResponse(c, http.StatusOK, "User deleted successfully", nil)
 }

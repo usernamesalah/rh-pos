@@ -12,7 +12,7 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*entities.User, error)
 	GetByID(ctx context.Context, id uint) (*entities.User, error)
 	Create(ctx context.Context, user *entities.User) error
-	List(ctx context.Context) ([]*entities.User, error)
+	List(ctx context.Context, page, limit int) ([]*entities.User, int64, error)
 	Update(ctx context.Context, user *entities.User) error
 	Delete(ctx context.Context, id uint) error
 }
@@ -51,6 +51,11 @@ type DiscountCampaignRepository interface {
 	AddProducts(ctx context.Context, campaignID uint, productIDs []uint) error
 	RemoveProduct(ctx context.Context, campaignID uint, productID uint) error
 	GetActiveCampaignsForProduct(ctx context.Context, productID uint) ([]entities.DiscountCampaign, error)
+}
+
+// AuditLogRepository defines the interface for audit log data operations
+type AuditLogRepository interface {
+	Create(ctx context.Context, log *entities.AuditLog) error
 }
 
 // TenantRepository defines the interface for tenant data operations

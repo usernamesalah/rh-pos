@@ -67,7 +67,7 @@ type GetUploadURLRequest struct {
 // @Param limit query int false "Items per page" default(10)
 // @Success 200 {object} Response{data=PaginatedResponse[HashIDResponse]}
 // @Failure 401 {object} Response
-// @Router /products [get]
+// @Router /api/products [get]
 func (h *ProductHandler) ListProducts(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -135,7 +135,7 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 // @Success 200 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /products/{id} [get]
+// @Router /api/products/{id} [get]
 func (h *ProductHandler) GetProduct(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -193,7 +193,7 @@ func (h *ProductHandler) GetProduct(c echo.Context) error {
 // @Success 200 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /products/{id} [put]
+// @Router /api/products/{id} [put]
 func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -272,7 +272,7 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 // @Success 200 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /products/{id}/stock [put]
+// @Router /api/products/{id}/stock [put]
 func (h *ProductHandler) UpdateStock(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -341,7 +341,7 @@ func (h *ProductHandler) UpdateStock(c echo.Context) error {
 // @Success 201 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 401 {object} Response
-// @Router /products [post]
+// @Router /api/products [post]
 func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -405,7 +405,7 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 // @Success 200 {object} Response{data=map[string]string}
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /products/{id}/upload-url [get]
+// @Router /api/products/{id}/upload-url [post]
 func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -475,7 +475,7 @@ func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 // @Success 200 {object} Response{data=HashIDResponse}
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /products/{id}/image [post]
+// @Router /api/products/{id}/image [post]
 func (h *ProductHandler) UploadProductImage(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -559,7 +559,7 @@ func (h *ProductHandler) UploadProductImage(c echo.Context) error {
 // @Success 200 {file} binary "Image file"
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /products/{id}/image/bytes [get]
+// @Router /api/products/{id}/image/bytes [get]
 func (h *ProductHandler) GetProductImageBytes(c echo.Context) error {
 	ctx := c.Request().Context()
 

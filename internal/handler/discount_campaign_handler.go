@@ -90,6 +90,17 @@ func formatCampaignResponse(campaign *entities.DiscountCampaign) map[string]inte
 }
 
 // CreateCampaign handles POST /api/discount-campaigns
+// @Summary Create a discount campaign
+// @Description Create a new discount campaign with optional product associations
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param request body CreateCampaignRequest true "Create campaign request"
+// @Success 201 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns [post]
 func (h *DiscountCampaignHandler) CreateCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -131,6 +142,17 @@ func (h *DiscountCampaignHandler) CreateCampaign(c echo.Context) error {
 }
 
 // ListCampaigns handles GET /api/discount-campaigns
+// @Summary List discount campaigns
+// @Description List all discount campaigns with pagination
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Items per page" default(10)
+// @Success 200 {object} Response{data=[]HashIDResponse}
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns [get]
 func (h *DiscountCampaignHandler) ListCampaigns(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -157,6 +179,18 @@ func (h *DiscountCampaignHandler) ListCampaigns(c echo.Context) error {
 }
 
 // GetCampaign handles GET /api/discount-campaigns/:id
+// @Summary Get a discount campaign
+// @Description Get a discount campaign by its hashed ID
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Hashed campaign ID"
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns/{id} [get]
 func (h *DiscountCampaignHandler) GetCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -177,6 +211,18 @@ func (h *DiscountCampaignHandler) GetCampaign(c echo.Context) error {
 }
 
 // UpdateCampaign handles PUT /api/discount-campaigns/:id
+// @Summary Update a discount campaign
+// @Description Update an existing discount campaign by its hashed ID
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Hashed campaign ID"
+// @Param request body UpdateCampaignRequest true "Update campaign request"
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns/{id} [put]
 func (h *DiscountCampaignHandler) UpdateCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -218,6 +264,17 @@ func (h *DiscountCampaignHandler) UpdateCampaign(c echo.Context) error {
 }
 
 // DeleteCampaign handles DELETE /api/discount-campaigns/:id
+// @Summary Delete a discount campaign
+// @Description Delete a discount campaign by its hashed ID
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Hashed campaign ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns/{id} [delete]
 func (h *DiscountCampaignHandler) DeleteCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -234,6 +291,18 @@ func (h *DiscountCampaignHandler) DeleteCampaign(c echo.Context) error {
 }
 
 // AddProducts handles POST /api/discount-campaigns/:id/products
+// @Summary Add products to a campaign
+// @Description Add one or more products to a discount campaign
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Hashed campaign ID"
+// @Param request body AddCampaignProductsRequest true "Add products request"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns/{id}/products [post]
 func (h *DiscountCampaignHandler) AddProducts(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -263,6 +332,18 @@ func (h *DiscountCampaignHandler) AddProducts(c echo.Context) error {
 }
 
 // RemoveProduct handles DELETE /api/discount-campaigns/:id/products/:product_id
+// @Summary Remove a product from a campaign
+// @Description Remove a specific product from a discount campaign
+// @Tags Discount Campaigns
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Hashed campaign ID"
+// @Param product_id path string true "Hashed product ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/discount-campaigns/{id}/products/{product_id} [delete]
 func (h *DiscountCampaignHandler) RemoveProduct(c echo.Context) error {
 	ctx := c.Request().Context()
 

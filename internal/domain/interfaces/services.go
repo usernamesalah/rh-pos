@@ -15,6 +15,9 @@ type AuthService interface {
 	GetUserByID(ctx context.Context, id uint) (*entities.User, error)
 	CreateUser(ctx context.Context, user *entities.User) error
 	UpdatePassword(ctx context.Context, userID uint, currentPassword, newPassword string) error
+	ListUsers(ctx context.Context, page, limit int) ([]*entities.User, int64, error)
+	UpdateUser(ctx context.Context, user *entities.User) error
+	DeleteUser(ctx context.Context, id uint) error
 }
 
 // ProductService defines product business operations
@@ -73,7 +76,7 @@ type TenantService interface {
 // CreateTransactionRequest represents the request to create a transaction
 type CreateTransactionRequest struct {
 	Items         []TransactionItemRequest `json:"items"`
-	User          string                   `json:"user"`
+	UserID        uint                     `json:"user_id"`
 	PaymentMethod string                   `json:"payment_method"`
 	Discount      float64                  `json:"discount"`
 	TotalPrice    float64                  `json:"total_price"`
@@ -109,11 +112,11 @@ type UpdateCampaignRequest struct {
 
 // WarrantyResponse represents the public warranty check response
 type WarrantyResponse struct {
-	TransactionID   string                `json:"transaction_id"`
-	TransactionDate time.Time             `json:"transaction_date"`
-	CustomerName    string                `json:"customer_name,omitempty"`
-	CustomerEmail   string                `json:"customer_email,omitempty"`
-	CustomerPhone   string                `json:"customer_phone,omitempty"`
+	TransactionID   string                 `json:"transaction_id"`
+	TransactionDate time.Time              `json:"transaction_date"`
+	CustomerName    string                 `json:"customer_name,omitempty"`
+	CustomerEmail   string                 `json:"customer_email,omitempty"`
+	CustomerPhone   string                 `json:"customer_phone,omitempty"`
 	Items           []WarrantyItemResponse `json:"items"`
 }
 
