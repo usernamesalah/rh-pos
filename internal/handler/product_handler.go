@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
+	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
 )
 
 type ProductHandler struct {
@@ -445,6 +447,12 @@ func (h *ProductHandler) GetUploadURL(c echo.Context) error {
 	// Get presigned upload URL and image key
 	uploadURL, imageKey, err := h.productService.GetProductUploadURL(ctx, product, ext)
 	if err != nil {
+		var storageErr *storage.StorageError
+		if errors.As(err, &storageErr) && errors.Is(storageErr.Err, storage.ErrNotSupported) {
+			return c.JSON(http.StatusNotImplemented, map[string]string{
+				"error": "presigned upload URLs are not supported with the current storage backend; use POST /:id/image instead",
+			})
+		}
 		h.logger.ErrorContext(ctx, "failed to get upload URL", "error", err, "product_id", product.ID)
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to get upload URL")
 	}
