@@ -153,8 +153,14 @@ func (c *Client) List(ctx context.Context, prefix string) ([]storage.ObjectInfo,
 	return objects, nil
 }
 
-// GeneratePresignedURL is not supported for local storage.
-// Use the regular upload/download HTTP endpoints instead.
-func (c *Client) GeneratePresignedURL(_ context.Context, key string, _ time.Duration, _ bool) (string, error) {
-	return "", storage.NewStorageError("presign", key, storage.ErrNotSupported)
+// GeneratePresignedURL returns a local URL for the file.
+// For local storage, this generates a URL that can be served by a static file handler.
+// The URL format is: /files/<tenant_id>/<key>
+func (c *Client) GeneratePresignedURL(ctx context.Context, key string, _ time.Duration, _ bool) (string, error) {
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return "", storage.NewStorageError("presign", key, fmt.Errorf("tenant ID not found in context"))
+	}
+	hashedID := hash.HashID(tenantID)
+	return "/files/" + hashedID + "/" + key, nil
 }

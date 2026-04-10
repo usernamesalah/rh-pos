@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,14 +121,34 @@ func TestList_IsolatedByTenant(t *testing.T) {
 	}
 }
 
-func TestGeneratePresignedURL_NotSupported(t *testing.T) {
+func TestGeneratePresignedURL_ReturnsLocalURL(t *testing.T) {
 	dir := t.TempDir()
 	client, _ := local.NewClient(dir, nil)
 	ctx := ctxWithTenant(1)
 
-	_, err := client.GeneratePresignedURL(ctx, "products/x.jpg", time.Hour, true)
+	url, err := client.GeneratePresignedURL(ctx, "products/x.jpg", time.Hour, false)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if url == "" {
+		t.Error("expected non-empty URL")
+	}
+	if !strings.HasPrefix(url, "/files/") {
+		t.Errorf("expected URL to start with /files/, got %s", url)
+	}
+	if !strings.HasSuffix(url, "/products/x.jpg") {
+		t.Errorf("expected URL to end with /products/x.jpg, got %s", url)
+	}
+}
+
+func TestGeneratePresignedURL_MissingTenantID(t *testing.T) {
+	dir := t.TempDir()
+	client, _ := local.NewClient(dir, nil)
+	ctx := context.Background()
+
+	_, err := client.GeneratePresignedURL(ctx, "products/x.jpg", time.Hour, false)
 	if err == nil {
-		t.Error("expected ErrNotSupported, got nil")
+		t.Error("expected error for missing tenant ID, got nil")
 	}
 }
 

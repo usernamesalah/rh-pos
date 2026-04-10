@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -155,6 +156,15 @@ func Load() (*Config, error) {
 	}
 	if len(config.Hash.Salt) < 16 {
 		return nil, fmt.Errorf("HASHID_SALT must be at least 16 characters")
+	}
+
+	// Convert local storage path to absolute path
+	if config.Storage.Type == "local" && config.Storage.LocalPath != "" {
+		absPath, err := filepath.Abs(config.Storage.LocalPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve local storage path: %w", err)
+		}
+		config.Storage.LocalPath = absPath
 	}
 
 	// Construct DSN
