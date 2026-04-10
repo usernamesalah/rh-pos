@@ -13,6 +13,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
+	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
 )
 
 const maxDownloadSize = 10 << 20 // 10 MB
@@ -89,13 +90,13 @@ func (c *Client) getTenantKey(ctx context.Context, key string) (string, error) {
 func (c *Client) Upload(ctx context.Context, key string, reader io.Reader, contentType string) error {
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
-		return NewStorageError("upload", key, err)
+		return storage.NewStorageError("upload", key, err)
 	}
 
 	_, err = c.client.PutObject(ctx, c.config.Bucket, objectKey, reader, -1,
 		minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
-		return NewStorageError("upload", key, err)
+		return storage.NewStorageError("upload", key, err)
 	}
 	return nil
 }
@@ -110,12 +111,12 @@ func (c *Client) UploadBytes(ctx context.Context, key string, data []byte, conte
 func (c *Client) Download(ctx context.Context, key string) (io.ReadCloser, error) {
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
-		return nil, NewStorageError("download", key, err)
+		return nil, storage.NewStorageError("download", key, err)
 	}
 
 	object, err := c.client.GetObject(ctx, c.config.Bucket, objectKey, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, NewStorageError("download", key, err)
+		return nil, storage.NewStorageError("download", key, err)
 	}
 	return object, nil
 }
@@ -145,25 +146,25 @@ func (c *Client) DownloadBytes(ctx context.Context, key string) ([]byte, error) 
 func (c *Client) Delete(ctx context.Context, key string) error {
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
-		return NewStorageError("delete", key, err)
+		return storage.NewStorageError("delete", key, err)
 	}
 
 	err = c.client.RemoveObject(ctx, c.config.Bucket, objectKey, minio.RemoveObjectOptions{})
 	if err != nil {
-		return NewStorageError("delete", key, err)
+		return storage.NewStorageError("delete", key, err)
 	}
 	return nil
 }
 
 // List lists objects in a prefix
-func (c *Client) List(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+func (c *Client) List(ctx context.Context, prefix string) ([]storage.ObjectInfo, error) {
 	tenantID, err := c.getTenantIDFromContext(ctx)
 	if err != nil {
-		return nil, NewStorageError("list", prefix, err)
+		return nil, storage.NewStorageError("list", prefix, err)
 	}
 
 	tenantPrefix := path.Join(tenantID, prefix)
-	objects := make([]ObjectInfo, 0)
+	objects := make([]storage.ObjectInfo, 0)
 
 	objectCh := c.client.ListObjects(ctx, c.config.Bucket, minio.ListObjectsOptions{
 		Prefix:    tenantPrefix,
@@ -172,9 +173,9 @@ func (c *Client) List(ctx context.Context, prefix string) ([]ObjectInfo, error) 
 
 	for object := range objectCh {
 		if object.Err != nil {
-			return nil, NewStorageError("list", prefix, object.Err)
+			return nil, storage.NewStorageError("list", prefix, object.Err)
 		}
-		objects = append(objects, ObjectInfo{
+		objects = append(objects, storage.ObjectInfo{
 			Key:          object.Key,
 			Size:         object.Size,
 			LastModified: object.LastModified,
@@ -193,7 +194,7 @@ func (c *Client) GeneratePresignedURL(ctx context.Context, key string, expiry ti
 
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
-		return "", NewStorageError("presign", key, err)
+		return "", storage.NewStorageError("presign", key, err)
 	}
 
 	c.logger.DebugContext(ctx, "generating presigned URL", "key", objectKey, "is_upload", isUpload)
@@ -201,14 +202,14 @@ func (c *Client) GeneratePresignedURL(ctx context.Context, key string, expiry ti
 	if isUpload {
 		presignedURL, err := c.client.PresignedPutObject(ctx, c.config.Bucket, objectKey, expiry)
 		if err != nil {
-			return "", NewStorageError("presign", key, err)
+			return "", storage.NewStorageError("presign", key, err)
 		}
 		return presignedURL.String(), nil
 	}
 
 	presignedURL, err := c.client.PresignedGetObject(ctx, c.config.Bucket, objectKey, expiry, nil)
 	if err != nil {
-		return "", NewStorageError("presign", key, err)
+		return "", storage.NewStorageError("presign", key, err)
 	}
 
 	return presignedURL.String(), nil

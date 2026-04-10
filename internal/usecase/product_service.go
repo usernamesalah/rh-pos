@@ -11,17 +11,16 @@ import (
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
 	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
-	"github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
 )
 
 type productService struct {
 	productRepo interfaces.ProductRepository
-	storage     minio.StorageClient
+	storage     storage.StorageClient
 	logger      *slog.Logger
 }
 
 // NewProductService creates a new product service
-func NewProductService(productRepo interfaces.ProductRepository, storage minio.StorageClient, logger *slog.Logger) interfaces.ProductService {
+func NewProductService(productRepo interfaces.ProductRepository, storage storage.StorageClient, logger *slog.Logger) interfaces.ProductService {
 	return &productService{
 		productRepo: productRepo,
 		storage:     storage,
