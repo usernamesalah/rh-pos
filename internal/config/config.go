@@ -16,8 +16,17 @@ type Config struct {
 	JWT      JWTConfig
 	Logger   LoggerConfig
 	Admin    AdminConfig
+	Storage  StorageConfig
 	MinIO    MinIOConfig
 	Hash     HashConfig
+}
+
+// StorageConfig selects the storage backend and its settings.
+type StorageConfig struct {
+	// Type is "minio" or "local".
+	Type string
+	// LocalPath is the base directory for local storage (only used when Type == "local").
+	LocalPath string
 }
 
 // ServerConfig holds server configuration
@@ -102,6 +111,10 @@ func Load() (*Config, error) {
 			Username: getEnv("ADMIN_USERNAME", ""),
 			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
+		Storage: StorageConfig{
+			Type:      getEnv("STORAGE_TYPE", "minio"),
+			LocalPath: getEnv("LOCAL_STORAGE_PATH", "./storage"),
+		},
 		MinIO: MinIOConfig{
 			Endpoint:        getEnv("MINIO_ENDPOINT", "minio:9000"),
 			AccessKeyID:     getEnv("MINIO_ACCESS_KEY", ""),
@@ -129,9 +142,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("ADMIN_USERNAME and ADMIN_PASSWORD are required")
 	}
 
-	// Validate MinIO configuration
-	if config.MinIO.AccessKeyID == "" || config.MinIO.SecretAccessKey == "" {
-		return nil, fmt.Errorf("MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required")
+	// Validate MinIO configuration (only required when STORAGE_TYPE=minio)
+	if config.Storage.Type == "minio" {
+		if config.MinIO.AccessKeyID == "" || config.MinIO.SecretAccessKey == "" {
+			return nil, fmt.Errorf("MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required when STORAGE_TYPE=minio")
+		}
 	}
 
 	// Validate HashID salt
