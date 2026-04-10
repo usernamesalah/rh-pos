@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,9 @@ import (
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
-	"github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
+	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
+	local "github.com/usernamesalah/rh-pos/internal/pkg/storage/local"
+	minioclient "github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
 	"github.com/usernamesalah/rh-pos/internal/repository"
 	"github.com/usernamesalah/rh-pos/internal/server"
 	"github.com/usernamesalah/rh-pos/internal/usecase"
@@ -55,20 +58,10 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		return err
 	}
 
-	// Initialize MinIO client
-	minioConfig := &minio.Config{
-		Endpoint:        cfg.MinIO.Endpoint,
-		AccessKeyID:     cfg.MinIO.AccessKeyID,
-		SecretAccessKey: cfg.MinIO.SecretAccessKey,
-		UseSSL:          cfg.MinIO.UseSSL,
-		Region:          cfg.MinIO.Region,
-		Bucket:          cfg.MinIO.Bucket,
-		DefaultExpiry:   cfg.MinIO.DefaultExpiry,
-	}
-
-	minioClient, err := minio.NewClient(minioConfig, appLogger)
+	// Initialize storage client based on STORAGE_TYPE config
+	storageClient, err := newStorageClient(cfg, appLogger)
 	if err != nil {
-		appLogger.Error("Failed to initialize MinIO client", "error", err)
+		appLogger.Error("Failed to initialize storage client", "error", err)
 		return err
 	}
 
@@ -81,7 +74,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 
 	// Initialize use cases
 	authUseCase := usecase.NewAuthService(userRepo, cfg.JWT.Secret, appLogger)
-	productUseCase := usecase.NewProductService(productRepo, minioClient, appLogger)
+	productUseCase := usecase.NewProductService(productRepo, storageClient, appLogger)
 	transactionUseCase := usecase.NewTransactionService(transactionRepo, productRepo, campaignRepo, db, appLogger)
 	reportUseCase := usecase.NewReportService(transactionRepo, appLogger)
 	tenantUseCase := usecase.NewTenantService(tenantRepo, appLogger)
@@ -158,4 +151,26 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	}
 
 	return nil
+}
+
+func newStorageClient(cfg *config.Config, logger *slog.Logger) (storage.StorageClient, error) {
+	switch cfg.Storage.Type {
+	case "local":
+		logger.Info("using local filesystem storage", "path", cfg.Storage.LocalPath)
+		return local.NewClient(cfg.Storage.LocalPath, logger)
+	case "minio":
+		logger.Info("using MinIO storage", "endpoint", cfg.MinIO.Endpoint)
+		minioConfig := &minioclient.Config{
+			Endpoint:        cfg.MinIO.Endpoint,
+			AccessKeyID:     cfg.MinIO.AccessKeyID,
+			SecretAccessKey: cfg.MinIO.SecretAccessKey,
+			UseSSL:          cfg.MinIO.UseSSL,
+			Region:          cfg.MinIO.Region,
+			Bucket:          cfg.MinIO.Bucket,
+			DefaultExpiry:   cfg.MinIO.DefaultExpiry,
+		}
+		return minioclient.NewClient(minioConfig, logger)
+	default:
+		return nil, fmt.Errorf("unknown STORAGE_TYPE %q: must be 'local' or 'minio'", cfg.Storage.Type)
+	}
 }
