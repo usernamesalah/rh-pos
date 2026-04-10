@@ -469,8 +469,6 @@ export const transactionsApi = {
         throw new Error(result.message || "Failed to fetch transactions")
       }
 
-      console.log(result.data)
-
       return {
         data: result.data,
         loading: false,
@@ -666,10 +664,10 @@ export const discountCampaignsApi = {
       )
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
       const result = await response.json()
-      if (result.status !== "success") throw new Error(result.message)
+      if (result.status !== "success") throw new Error(result.message || "Request failed")
       return { data: result.data as DiscountCampaign[], pagination: result.pagination, error: null }
     } catch (error: any) {
-      return { data: [] as DiscountCampaign[], pagination: null, error: error.message }
+      return { data: [] as DiscountCampaign[], pagination: undefined, error: error.message }
     }
   },
 
@@ -682,7 +680,7 @@ export const discountCampaignsApi = {
       })
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
       const result = await response.json()
-      if (result.status !== "success") throw new Error(result.message)
+      if (result.status !== "success") throw new Error(result.message || "Request failed")
       return { data: result.data as DiscountCampaign, error: null }
     } catch (error: any) {
       return { data: null, error: error.message }
@@ -781,6 +779,7 @@ export const discountCampaignsApi = {
   },
 }
 
+// Public warranty endpoints - no authentication required
 export const warrantyApi = {
   checkByTransactionId: async (transactionId: string) => {
     try {
