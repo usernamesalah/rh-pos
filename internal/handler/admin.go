@@ -128,6 +128,13 @@ func (h *AdminHandler) ListTenants(c echo.Context) error {
 	return c.JSON(http.StatusOK, tenants)
 }
 
+type adminCreateUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+	TenantID *uint  `json:"tenant_id"`
+}
+
 // CreateUser handles user creation by admin
 // @Summary Create a new user
 // @Description Create a new user assigned to a tenant
@@ -135,23 +142,28 @@ func (h *AdminHandler) ListTenants(c echo.Context) error {
 // @Accept json
 // @Produce json
 // @Security basicAuth
-// @Param request body entities.User true "User data"
+// @Param request body adminCreateUserRequest true "User data"
 // @Success 201 {object} entities.User
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /admin/users [post]
 func (h *AdminHandler) CreateUser(c echo.Context) error {
-	var user entities.User
-	if err := c.Bind(&user); err != nil {
+	var req adminCreateUserRequest
+	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 	}
 
-	// Validate tenant_id is provided in request
-	if user.TenantID == nil {
+	if req.TenantID == nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Tenant ID is required for user creation"})
 	}
 
-	// Create the user
+	user := entities.User{
+		Username: req.Username,
+		Password: req.Password,
+		Role:     req.Role,
+		TenantID: req.TenantID,
+	}
+
 	if err := h.userService.CreateUser(c.Request().Context(), &user); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
