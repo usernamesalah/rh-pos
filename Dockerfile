@@ -3,11 +3,15 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
+# Cache dependencies before copying full source
+COPY go.mod go.sum ./
+RUN go mod download
+
 # Copy the rest of the source code
 COPY . .
 
 # Build the application with optimizations
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s" \
     -o main cmd/main.go
 
