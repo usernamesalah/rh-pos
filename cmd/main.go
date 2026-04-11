@@ -17,7 +17,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"log/slog"
@@ -27,8 +26,6 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/pressly/goose/v3"
 	_ "github.com/usernamesalah/rh-pos/docs"
 	"github.com/usernamesalah/rh-pos/internal/config"
 	"github.com/usernamesalah/rh-pos/internal/handler"
@@ -49,14 +46,6 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Handle migrate subcommand: ./bin/rh-pos migrate [up|down|status|...]
-	if len(os.Args) >= 2 && os.Args[1] == "migrate" {
-		if err := runMigrations(cfg); err != nil {
-			log.Fatalf("migration failed: %v", err)
-		}
-		return
 	}
 
 	// Initialize logger
@@ -181,32 +170,6 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		}
 	}
 
-	return nil
-}
-
-func runMigrations(cfg *config.Config) error {
-	db, err := sql.Open("mysql", cfg.Database.DSN)
-	if err != nil {
-		return fmt.Errorf("failed to open db for migration: %w", err)
-	}
-	defer db.Close()
-
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping db: %w", err)
-	}
-
-	goose.SetDialect("mysql")
-
-	// Default to "up" if no subcommand given
-	command := "up"
-	if len(os.Args) >= 3 {
-		command = os.Args[2]
-	}
-
-	args := os.Args[3:]
-	if err := goose.RunContext(context.Background(), command, db, "migrations", args...); err != nil {
-		return fmt.Errorf("goose %s: %w", command, err)
-	}
 	return nil
 }
 
