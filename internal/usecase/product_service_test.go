@@ -95,6 +95,21 @@ func TestCreateProduct_NilSKU_DoesNotCheckDuplicate(t *testing.T) {
 	}
 }
 
+func TestDeleteProduct_ExistingProduct_Succeeds(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewProductService(repo, nil, "", newLogger())
+	ctx := ctxWithTenant(1)
+
+	p := &entities.Product{Name: "ToDelete"}
+	if err := svc.CreateProduct(ctx, p); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	if err := svc.DeleteProduct(ctx, p.ID); err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}
+
 func TestCreateProduct_DuplicateSKU_ReturnsError(t *testing.T) {
 	repo := newMockRepo()
 	svc := usecase.NewProductService(repo, nil, "", newLogger())

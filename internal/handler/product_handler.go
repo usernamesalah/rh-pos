@@ -556,6 +556,33 @@ func (h *ProductHandler) UploadProductImage(c echo.Context) error {
 	return SuccessResponse(c, http.StatusOK, "Product image uploaded successfully", response)
 }
 
+// DeleteProduct handles deleting a product
+// @Summary Delete a product
+// @Description Delete a product by its hashed ID (admin only)
+// @Tags Products
+// @Produce json
+// @Security bearerAuth
+// @Param id path string true "Hashed product ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/products/{id} [delete]
+func (h *ProductHandler) DeleteProduct(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	id, err := hash.DecodeHashID(c.Param("id"))
+	if err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
+	}
+
+	if err := h.productService.DeleteProduct(ctx, id); err != nil {
+		h.logger.ErrorContext(ctx, "failed to delete product", "error", err, "id", id)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to delete product")
+	}
+
+	return SuccessResponse(c, http.StatusOK, "Product deleted successfully", nil)
+}
+
 // GetProductImageBytes handles serving product image bytes directly
 // @Summary Get product image
 // @Description Get product image as bytes (serves the actual image file)

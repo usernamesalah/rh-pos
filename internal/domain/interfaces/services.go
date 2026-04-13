@@ -27,6 +27,7 @@ type ProductService interface {
 	UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error)
 	UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error)
 	CreateProduct(ctx context.Context, product *entities.Product) error
+	DeleteProduct(ctx context.Context, id uint) error
 	GetProductImageURL(ctx context.Context, product *entities.Product) (string, error)
 	// GetProductUploadURL returns a presigned PUT URL and the generated image key.
 	// The caller is responsible for persisting the key after a successful upload.

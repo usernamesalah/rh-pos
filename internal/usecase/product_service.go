@@ -155,6 +155,16 @@ func (s *productService) CreateProduct(ctx context.Context, product *entities.Pr
 	return nil
 }
 
+func (s *productService) DeleteProduct(ctx context.Context, id uint) error {
+	s.logger.InfoContext(ctx, "deleting product", "id", id)
+
+	if err := s.productRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete product: %w", err)
+	}
+
+	return nil
+}
+
 // GetProductImageURL generates a presigned GET URL for the product image
 func (s *productService) GetProductImageURL(ctx context.Context, product *entities.Product) (string, error) {
 	if product.Image == "" {

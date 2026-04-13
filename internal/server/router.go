@@ -144,6 +144,7 @@ func SetupRouter(
 	products.POST("", productHandler.CreateProduct, adminMiddleware.AdminOnly)
 	products.PUT("/:id", productHandler.UpdateProduct, adminMiddleware.AdminOnly)
 	products.PUT("/:id/stock", productHandler.UpdateStock, adminMiddleware.AdminOnly)
+	products.DELETE("/:id", productHandler.DeleteProduct, adminMiddleware.AdminOnly)
 	products.POST("/:id/upload-url", productHandler.GetUploadURL, adminMiddleware.AdminOnly)
 	products.POST("/:id/image", productHandler.UploadProductImage, adminMiddleware.AdminOnly)
 
