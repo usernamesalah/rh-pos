@@ -163,7 +163,7 @@ func SetupRouter(
 	campaigns.GET("", campaignHandler.ListCampaigns)
 	campaigns.GET("/:id", campaignHandler.GetCampaign)
 	campaigns.POST("", campaignHandler.CreateCampaign, adminMiddleware.AdminOnly)
-	campaigns.PUT("/:id", campaignHandler.UpdateCampaign, adminMiddleware.AdminOnly)
+	campaigns.PUT("/:id", campaignHandler.UpdateCampaign)
 	campaigns.DELETE("/:id", campaignHandler.DeleteCampaign, adminMiddleware.AdminOnly)
 	campaigns.POST("/:id/products", campaignHandler.AddProducts, adminMiddleware.AdminOnly)
 	campaigns.DELETE("/:id/products/:product_id", campaignHandler.RemoveProduct, adminMiddleware.AdminOnly)
