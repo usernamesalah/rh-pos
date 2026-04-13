@@ -14,13 +14,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// DiscountCampaignHandler handles discount campaign HTTP requests
 type DiscountCampaignHandler struct {
 	campaignService interfaces.DiscountCampaignService
 	logger          *slog.Logger
 }
 
-// NewDiscountCampaignHandler creates a new discount campaign handler
 func NewDiscountCampaignHandler(campaignService interfaces.DiscountCampaignService, logger *slog.Logger) *DiscountCampaignHandler {
 	return &DiscountCampaignHandler{
 		campaignService: campaignService,
@@ -28,24 +26,31 @@ func NewDiscountCampaignHandler(campaignService interfaces.DiscountCampaignServi
 	}
 }
 
-// CreateCampaignRequest is the request body for creating a discount campaign
 type CreateCampaignRequest struct {
 	Name               string   `json:"name" validate:"required"`
-	DiscountPercentage float64  `json:"discount_percentage" validate:"required,gt=0,lte=100"`
+	CampaignType       string   `json:"campaign_type"`
+	DiscountPercentage float64  `json:"discount_percentage"`
+	BuyQuantity        *int     `json:"buy_quantity"`
+	DiscountAmount     *float64 `json:"discount_amount"`
+	RewardProductID    *string  `json:"reward_product_id"`
+	RewardQuantity     *int     `json:"reward_quantity"`
 	StartDate          string   `json:"start_date" validate:"required"`
 	EndDate            string   `json:"end_date" validate:"required"`
 	ProductIDs         []string `json:"product_ids"`
 }
 
-// UpdateCampaignRequest is the request body for updating a discount campaign
 type UpdateCampaignRequest struct {
 	Name               *string  `json:"name"`
+	CampaignType       *string  `json:"campaign_type"`
 	DiscountPercentage *float64 `json:"discount_percentage"`
+	BuyQuantity        *int     `json:"buy_quantity"`
+	DiscountAmount     *float64 `json:"discount_amount"`
+	RewardProductID    *string  `json:"reward_product_id"`
+	RewardQuantity     *int     `json:"reward_quantity"`
 	StartDate          *string  `json:"start_date"`
 	EndDate            *string  `json:"end_date"`
 }
 
-// AddCampaignProductsRequest is the request body for adding products to a campaign
 type AddCampaignProductsRequest struct {
 	ProductIDs []string `json:"product_ids" validate:"required,min=1"`
 }
@@ -75,23 +80,42 @@ func formatCampaignProducts(products []entities.DiscountCampaignProduct) []map[s
 }
 
 func formatCampaignResponse(campaign *entities.DiscountCampaign) map[string]interface{} {
+	data := map[string]interface{}{
+		"name":                campaign.Name,
+		"campaign_type":       campaign.CampaignType,
+		"discount_percentage": campaign.DiscountPercentage,
+		"start_date":          campaign.StartDate.Format(time.RFC3339),
+		"end_date":            campaign.EndDate.Format(time.RFC3339),
+		"products":            formatCampaignProducts(campaign.Products),
+	}
+	if campaign.BuyQuantity != nil {
+		data["buy_quantity"] = *campaign.BuyQuantity
+	}
+	if campaign.DiscountAmount != nil {
+		data["discount_amount"] = *campaign.DiscountAmount
+	}
+	if campaign.RewardProductID != nil {
+		data["reward_product_id"] = hash.HashID(*campaign.RewardProductID)
+	}
+	if campaign.RewardQuantity != nil {
+		data["reward_quantity"] = *campaign.RewardQuantity
+	}
+	if campaign.RewardProduct != nil {
+		data["reward_product"] = map[string]interface{}{
+			"id":   hash.HashID(campaign.RewardProduct.ID),
+			"name": campaign.RewardProduct.Name,
+			"sku":  campaign.RewardProduct.SKU,
+		}
+	}
 	return WithHashID(
 		campaign.ID,
 		campaign.CreatedAt.Format(time.RFC3339),
 		campaign.UpdatedAt.Format(time.RFC3339),
-		map[string]interface{}{
-			"name":                campaign.Name,
-			"discount_percentage": campaign.DiscountPercentage,
-			"start_date":          campaign.StartDate.Format(time.RFC3339),
-			"end_date":            campaign.EndDate.Format(time.RFC3339),
-			"products":            formatCampaignProducts(campaign.Products),
-		},
+		data,
 	)
 }
 
-// CreateCampaign handles POST /api/discount-campaigns
 // @Summary Create a discount campaign
-// @Description Create a new discount campaign with optional product associations
 // @Tags Discount Campaigns
 // @Accept json
 // @Produce json
@@ -126,26 +150,37 @@ func (h *DiscountCampaignHandler) CreateCampaign(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
 	}
 
+	var rewardProductID *uint
+	if req.RewardProductID != nil {
+		decoded, err := hash.DecodeHashID(*req.RewardProductID)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid reward_product_id format")
+		}
+		rewardProductID = &decoded
+	}
+
 	campaign, err := h.campaignService.Create(ctx, interfaces.CreateCampaignRequest{
 		Name:               req.Name,
+		CampaignType:       req.CampaignType,
 		DiscountPercentage: req.DiscountPercentage,
+		BuyQuantity:        req.BuyQuantity,
+		DiscountAmount:     req.DiscountAmount,
+		RewardProductID:    rewardProductID,
+		RewardQuantity:     req.RewardQuantity,
 		StartDate:          startDate,
 		EndDate:            endDate,
 		ProductIDs:         productIDs,
 	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to create campaign", "error", err)
-		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return ErrorResponse(c, http.StatusBadRequest, err.Error())
 	}
 
 	return SuccessResponse(c, http.StatusCreated, "Campaign created successfully", formatCampaignResponse(campaign))
 }
 
-// ListCampaigns handles GET /api/discount-campaigns
 // @Summary List discount campaigns
-// @Description List all discount campaigns with pagination
 // @Tags Discount Campaigns
-// @Accept json
 // @Produce json
 // @Security bearerAuth
 // @Param page query int false "Page number" default(1)
@@ -178,18 +213,13 @@ func (h *DiscountCampaignHandler) ListCampaigns(c echo.Context) error {
 	return SuccessPaginatedResponse(c, http.StatusOK, "Campaigns retrieved successfully", result, total, page, limit)
 }
 
-// GetCampaign handles GET /api/discount-campaigns/:id
 // @Summary Get a discount campaign
-// @Description Get a discount campaign by its hashed ID
 // @Tags Discount Campaigns
-// @Accept json
 // @Produce json
 // @Security bearerAuth
 // @Param id path string true "Hashed campaign ID"
 // @Success 200 {object} Response{data=HashIDResponse}
-// @Failure 400 {object} Response
-// @Failure 404 {object} Response
-// @Failure 500 {object} Response
+// @Failure 400,404,500 {object} Response
 // @Router /api/discount-campaigns/{id} [get]
 func (h *DiscountCampaignHandler) GetCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -210,9 +240,7 @@ func (h *DiscountCampaignHandler) GetCampaign(c echo.Context) error {
 	return SuccessResponse(c, http.StatusOK, "Campaign retrieved successfully", formatCampaignResponse(campaign))
 }
 
-// UpdateCampaign handles PUT /api/discount-campaigns/:id
 // @Summary Update a discount campaign
-// @Description Update an existing discount campaign by its hashed ID
 // @Tags Discount Campaigns
 // @Accept json
 // @Produce json
@@ -220,8 +248,7 @@ func (h *DiscountCampaignHandler) GetCampaign(c echo.Context) error {
 // @Param id path string true "Hashed campaign ID"
 // @Param request body UpdateCampaignRequest true "Update campaign request"
 // @Success 200 {object} Response{data=HashIDResponse}
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
+// @Failure 400,500 {object} Response
 // @Router /api/discount-campaigns/{id} [put]
 func (h *DiscountCampaignHandler) UpdateCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -238,8 +265,21 @@ func (h *DiscountCampaignHandler) UpdateCampaign(c echo.Context) error {
 
 	svcReq := interfaces.UpdateCampaignRequest{
 		Name:               req.Name,
+		CampaignType:       req.CampaignType,
 		DiscountPercentage: req.DiscountPercentage,
+		BuyQuantity:        req.BuyQuantity,
+		DiscountAmount:     req.DiscountAmount,
+		RewardQuantity:     req.RewardQuantity,
 	}
+
+	if req.RewardProductID != nil {
+		decoded, err := hash.DecodeHashID(*req.RewardProductID)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid reward_product_id format")
+		}
+		svcReq.RewardProductID = &decoded
+	}
+
 	if req.StartDate != nil {
 		t, err := parseDate(*req.StartDate)
 		if err != nil {
@@ -257,23 +297,19 @@ func (h *DiscountCampaignHandler) UpdateCampaign(c echo.Context) error {
 
 	campaign, err := h.campaignService.Update(ctx, id, svcReq)
 	if err != nil {
-		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return ErrorResponse(c, http.StatusBadRequest, err.Error())
 	}
 
 	return SuccessResponse(c, http.StatusOK, "Campaign updated successfully", formatCampaignResponse(campaign))
 }
 
-// DeleteCampaign handles DELETE /api/discount-campaigns/:id
 // @Summary Delete a discount campaign
-// @Description Delete a discount campaign by its hashed ID
 // @Tags Discount Campaigns
-// @Accept json
 // @Produce json
 // @Security bearerAuth
 // @Param id path string true "Hashed campaign ID"
 // @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
+// @Failure 400,500 {object} Response
 // @Router /api/discount-campaigns/{id} [delete]
 func (h *DiscountCampaignHandler) DeleteCampaign(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -290,9 +326,7 @@ func (h *DiscountCampaignHandler) DeleteCampaign(c echo.Context) error {
 	return SuccessResponse(c, http.StatusOK, "Campaign deleted successfully", nil)
 }
 
-// AddProducts handles POST /api/discount-campaigns/:id/products
 // @Summary Add products to a campaign
-// @Description Add one or more products to a discount campaign
 // @Tags Discount Campaigns
 // @Accept json
 // @Produce json
@@ -300,8 +334,7 @@ func (h *DiscountCampaignHandler) DeleteCampaign(c echo.Context) error {
 // @Param id path string true "Hashed campaign ID"
 // @Param request body AddCampaignProductsRequest true "Add products request"
 // @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
+// @Failure 400,500 {object} Response
 // @Router /api/discount-campaigns/{id}/products [post]
 func (h *DiscountCampaignHandler) AddProducts(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -331,18 +364,14 @@ func (h *DiscountCampaignHandler) AddProducts(c echo.Context) error {
 	return SuccessResponse(c, http.StatusOK, "Products added to campaign", nil)
 }
 
-// RemoveProduct handles DELETE /api/discount-campaigns/:id/products/:product_id
 // @Summary Remove a product from a campaign
-// @Description Remove a specific product from a discount campaign
 // @Tags Discount Campaigns
-// @Accept json
 // @Produce json
 // @Security bearerAuth
 // @Param id path string true "Hashed campaign ID"
 // @Param product_id path string true "Hashed product ID"
 // @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
+// @Failure 400,500 {object} Response
 // @Router /api/discount-campaigns/{id}/products/{product_id} [delete]
 func (h *DiscountCampaignHandler) RemoveProduct(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -364,7 +393,6 @@ func (h *DiscountCampaignHandler) RemoveProduct(c echo.Context) error {
 	return SuccessResponse(c, http.StatusOK, "Product removed from campaign", nil)
 }
 
-// decodeHashIDs decodes a slice of hashed IDs to uint
 func decodeHashIDs(hashedIDs []string) ([]uint, error) {
 	ids := make([]uint, 0, len(hashedIDs))
 	for _, hid := range hashedIDs {

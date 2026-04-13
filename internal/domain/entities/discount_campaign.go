@@ -2,11 +2,23 @@ package entities
 
 import "time"
 
-// DiscountCampaign represents a time-bound discount campaign for products
+const (
+	CampaignTypeProductPercentageDiscount  = "product_percentage_discount"
+	CampaignTypeBuyXQtyGetDiscountAmount   = "buy_x_qty_get_discount_amount"
+	CampaignTypeBuyXQtyGetDiscountPercent  = "buy_x_qty_get_discount_percentage"
+	CampaignTypeBuyXProductGetYProductFree = "buy_x_product_get_y_product_free"
+)
+
 type DiscountCampaign struct {
 	ID                 uint                      `json:"id" gorm:"primaryKey"`
 	Name               string                    `json:"name" gorm:"not null"`
+	CampaignType       string                    `json:"campaign_type" gorm:"not null;default:product_percentage_discount"`
 	DiscountPercentage float64                   `json:"discount_percentage" gorm:"not null"`
+	BuyQuantity        *int                      `json:"buy_quantity"`
+	DiscountAmount     *float64                  `json:"discount_amount"`
+	RewardProductID    *uint                     `json:"reward_product_id"`
+	RewardProduct      *Product                  `json:"reward_product,omitempty" gorm:"foreignKey:RewardProductID"`
+	RewardQuantity     *int                      `json:"reward_quantity"`
 	StartDate          time.Time                 `json:"start_date" gorm:"not null"`
 	EndDate            time.Time                 `json:"end_date" gorm:"not null"`
 	TenantID           *uint                     `json:"tenant_id" gorm:"index"`
@@ -15,7 +27,6 @@ type DiscountCampaign struct {
 	UpdatedAt          time.Time                 `json:"updated_at"`
 }
 
-// DiscountCampaignProduct is the join table between campaigns and products
 type DiscountCampaignProduct struct {
 	ID         uint      `json:"id" gorm:"primaryKey"`
 	CampaignID uint      `json:"campaign_id" gorm:"not null"`
@@ -24,12 +35,10 @@ type DiscountCampaignProduct struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// TableName sets the table name for GORM
 func (DiscountCampaign) TableName() string {
 	return "discount_campaigns"
 }
 
-// TableName sets the table name for GORM
 func (DiscountCampaignProduct) TableName() string {
 	return "discount_campaign_products"
 }

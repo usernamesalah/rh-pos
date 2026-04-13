@@ -18,7 +18,6 @@ type TransactionHandler struct {
 	logger             *slog.Logger
 }
 
-// NewTransactionHandler creates a new transaction handler
 func NewTransactionHandler(transactionService interfaces.TransactionService, logger *slog.Logger) *TransactionHandler {
 	return &TransactionHandler{
 		transactionService: transactionService,
@@ -26,7 +25,6 @@ func NewTransactionHandler(transactionService interfaces.TransactionService, log
 	}
 }
 
-// CreateTransactionRequest represents the create transaction request
 type CreateTransactionRequest struct {
 	Items         []TransactionItemRequest `json:"items" validate:"required,min=1"`
 	PaymentMethod string                   `json:"payment_method" validate:"required"`
@@ -38,16 +36,15 @@ type CreateTransactionRequest struct {
 	CustomerPhone *string                  `json:"customer_phone"`
 }
 
-// TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID    string `json:"product_id" validate:"required"`
-	Quantity     int    `json:"quantity" validate:"required,min=1"`
-	WarrantyDays int    `json:"warranty_days"`
+	ProductID    string  `json:"product_id" validate:"required"`
+	Quantity     int     `json:"quantity" validate:"required,min=1"`
+	WarrantyDays int     `json:"warranty_days"`
+	IsFreeItem   bool    `json:"is_free_item"`
+	CampaignID   *string `json:"campaign_id"`
 }
 
-// CreateTransaction handles creating a new transaction
 // @Summary Create a new transaction
-// @Description Create a new sales transaction
 // @Tags Transactions
 // @Accept json
 // @Produce json
@@ -71,13 +68,11 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
 	}
 
-	// Get user_id from JWT context
 	userID, ok := c.Get("user_id").(uint)
 	if !ok {
 		return ErrorResponse(c, http.StatusUnauthorized, "Invalid token claims")
 	}
 
-	// Convert to service request
 	serviceReq := interfaces.CreateTransactionRequest{
 		UserID:        userID,
 		PaymentMethod: req.PaymentMethod,
@@ -90,7 +85,6 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 		Items:         make([]interfaces.TransactionItemRequest, len(req.Items)),
 	}
 
-	// Decode hashed product IDs and convert to service request
 	for i, item := range req.Items {
 		productID, err := hash.DecodeHashID(item.ProductID)
 		if err != nil {
@@ -98,25 +92,35 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 			return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
 		}
 
-		serviceReq.Items[i] = interfaces.TransactionItemRequest{
+		svcItem := interfaces.TransactionItemRequest{
 			ProductID:    productID,
 			Quantity:     item.Quantity,
 			WarrantyDays: item.WarrantyDays,
+			IsFreeItem:   item.IsFreeItem,
 		}
+
+		if item.CampaignID != nil {
+			campaignID, err := hash.DecodeHashID(*item.CampaignID)
+			if err != nil {
+				h.logger.WarnContext(ctx, "invalid campaign ID format", "error", err)
+				return ErrorResponse(c, http.StatusBadRequest, "Invalid campaign ID format")
+			}
+			svcItem.CampaignID = &campaignID
+		}
+
+		serviceReq.Items[i] = svcItem
 	}
 
 	transaction, err := h.transactionService.CreateTransaction(ctx, serviceReq)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to create transaction", "error", err)
-		return ErrorResponse(c, http.StatusInternalServerError, "Failed to create transaction")
+		return ErrorResponse(c, http.StatusBadRequest, err.Error())
 	}
 
 	return SuccessResponse(c, http.StatusCreated, "Transaction created successfully", formatTransaction(transaction))
 }
 
-// ListTransactions handles listing transactions with pagination
 // @Summary List all transactions
-// @Description Get a paginated list of transactions
 // @Tags Transactions
 // @Produce json
 // @Security bearerAuth
@@ -152,24 +156,18 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 	return SuccessPaginatedResponse(c, http.StatusOK, "Transactions retrieved successfully", result, total, page, limit)
 }
 
-// GetTransaction handles getting a single transaction by ID
 // @Summary Get a transaction by ID
-// @Description Get detailed information about a specific transaction
 // @Tags Transactions
 // @Produce json
 // @Security bearerAuth
 // @Param id path string true "Transaction ID"
 // @Success 200 {object} Response{data=HashIDResponse}
-// @Failure 400 {object} Response
-// @Failure 404 {object} Response
+// @Failure 400,404 {object} Response
 // @Router /api/transactions/{id} [get]
 func (h *TransactionHandler) GetTransaction(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// Get hashed ID from URL
 	hashedID := c.Param("id")
-
-	// Decode hashed ID to get the actual ID
 	id, err := hash.DecodeHashID(hashedID)
 	if err != nil {
 		h.logger.WarnContext(ctx, "invalid transaction ID format", "error", err, "hashed_id", hashedID)
@@ -197,6 +195,8 @@ func formatTransactionItems(items []entities.TransactionItem) []map[string]inter
 			"price":               item.Price,
 			"warranty_days":       item.WarrantyDays,
 			"discount_percentage": item.DiscountPercentage,
+			"discount_amount":     item.DiscountAmount,
+			"is_free_item":        item.IsFreeItem,
 			"product": map[string]interface{}{
 				"id":          hash.HashID(item.Product.ID),
 				"name":        item.Product.Name,
@@ -209,6 +209,12 @@ func formatTransactionItems(items []entities.TransactionItem) []map[string]inter
 		}
 		if item.CampaignID != nil {
 			itemMap["campaign_id"] = hash.HashID(*item.CampaignID)
+		}
+		if item.CampaignType != "" {
+			itemMap["campaign_type"] = item.CampaignType
+		}
+		if item.CampaignGroupKey != "" {
+			itemMap["campaign_group_key"] = item.CampaignGroupKey
 		}
 		result[i] = itemMap
 	}
@@ -224,7 +230,6 @@ func formatTransaction(t *entities.Transaction) HashIDResponse {
 		"notes":          t.Notes,
 	}
 
-	// Include user info if available
 	if t.UserID != nil {
 		data["user_id"] = hash.HashID(*t.UserID)
 	}

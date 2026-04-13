@@ -151,3 +151,28 @@ func (r *discountCampaignRepository) GetActiveCampaignsForProduct(ctx context.Co
 
 	return campaigns, nil
 }
+
+func (r *discountCampaignRepository) GetActiveCampaignsForProducts(ctx context.Context, productIDs []uint) ([]entities.DiscountCampaign, error) {
+	if len(productIDs) == 0 {
+		return nil, nil
+	}
+
+	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("tenant_id not found in context")
+	}
+
+	now := time.Now().UTC()
+	var campaigns []entities.DiscountCampaign
+
+	if err := r.db.WithContext(ctx).
+		Preload("Products.Product").
+		Preload("RewardProduct").
+		Where("tenant_id = ? AND start_date <= ? AND end_date >= ?", tenantID, now, now).
+		Where("id IN (SELECT campaign_id FROM discount_campaign_products WHERE product_id IN ?)", productIDs).
+		Find(&campaigns).Error; err != nil {
+		return nil, fmt.Errorf("failed to get active campaigns for products: %w", err)
+	}
+
+	return campaigns, nil
+}

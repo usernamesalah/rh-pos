@@ -87,26 +87,35 @@ type CreateTransactionRequest struct {
 	CustomerPhone *string                  `json:"customer_phone"`
 }
 
-// TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID    uint `json:"product_id"`
-	Quantity     int  `json:"quantity"`
-	WarrantyDays int  `json:"warranty_days"`
+	ProductID    uint  `json:"product_id"`
+	Quantity     int   `json:"quantity"`
+	WarrantyDays int   `json:"warranty_days"`
+	IsFreeItem   bool  `json:"is_free_item"`
+	CampaignID   *uint `json:"campaign_id"`
 }
 
-// CreateCampaignRequest represents the request to create a discount campaign
 type CreateCampaignRequest struct {
 	Name               string    `json:"name"`
+	CampaignType       string    `json:"campaign_type"`
 	DiscountPercentage float64   `json:"discount_percentage"`
+	BuyQuantity        *int      `json:"buy_quantity"`
+	DiscountAmount     *float64  `json:"discount_amount"`
+	RewardProductID    *uint     `json:"reward_product_id"`
+	RewardQuantity     *int      `json:"reward_quantity"`
 	StartDate          time.Time `json:"start_date"`
 	EndDate            time.Time `json:"end_date"`
 	ProductIDs         []uint    `json:"product_ids"`
 }
 
-// UpdateCampaignRequest represents the request to update a discount campaign
 type UpdateCampaignRequest struct {
 	Name               *string    `json:"name"`
+	CampaignType       *string    `json:"campaign_type"`
 	DiscountPercentage *float64   `json:"discount_percentage"`
+	BuyQuantity        *int       `json:"buy_quantity"`
+	DiscountAmount     *float64   `json:"discount_amount"`
+	RewardProductID    *uint      `json:"reward_product_id"`
+	RewardQuantity     *int       `json:"reward_quantity"`
 	StartDate          *time.Time `json:"start_date"`
 	EndDate            *time.Time `json:"end_date"`
 }
