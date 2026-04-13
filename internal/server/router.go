@@ -129,6 +129,7 @@ func SetupRouter(
 	// User routes
 	api.GET("/profile", authHandler.GetProfile)
 	api.GET("/my-tenant", authHandler.GetMyTenant)
+	api.PUT("/my-tenant", authHandler.UpdateMyTenant, adminMiddleware.AdminOnly)
 	api.PUT("/update-password", authHandler.UpdatePassword)
 	api.GET("/users", authHandler.ListUsers)
 	api.POST("/users", authHandler.CreateUser)

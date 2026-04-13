@@ -55,6 +55,15 @@ type UpdatePasswordRequest struct {
 	NewPassword     string `json:"new_password" validate:"required,min=6"`
 }
 
+type UpdateMyTenantRequest struct {
+	Name           string `json:"name"`
+	About          string `json:"about"`
+	Address        string `json:"address"`
+	PhoneNumber    string `json:"phone_number"`
+	Logo           string `json:"logo"`
+	TermsOfService string `json:"terms_of_service"`
+}
+
 // Login handles user authentication
 // @Summary Login to the system
 // @Description Authenticate user with username and password
@@ -181,6 +190,58 @@ func (h *AuthHandler) GetMyTenant(c echo.Context) error {
 	)
 
 	return SuccessResponse(c, http.StatusOK, "Tenant information retrieved successfully", response)
+}
+
+// UpdateMyTenant handles updating current user's tenant information
+// @Summary Update user's tenant information
+// @Description Update current tenant details for tenant admin
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Security bearerAuth
+// @Param request body UpdateMyTenantRequest true "Tenant update request"
+// @Success 200 {object} Response{data=HashIDResponse}
+// @Failure 400 {object} Response
+// @Failure 401 {object} Response
+// @Failure 404 {object} Response
+// @Router /api/my-tenant [put]
+func (h *AuthHandler) UpdateMyTenant(c echo.Context) error {
+	tenantID, ok := c.Get("tenant_id").(uint)
+	if !ok {
+		return ErrorResponse(c, http.StatusUnauthorized, "Tenant information not available")
+	}
+
+	tenant, err := h.tenantService.GetTenant(c.Request().Context(), tenantID)
+	if err != nil {
+		h.logger.ErrorContext(c.Request().Context(), "failed to get tenant before update", "error", err, "tenant_id", tenantID)
+		return ErrorResponse(c, http.StatusNotFound, "Tenant not found")
+	}
+
+	var req UpdateMyTenantRequest
+	if err := c.Bind(&req); err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
+	}
+
+	tenant.Name = req.Name
+	tenant.About = req.About
+	tenant.Address = req.Address
+	tenant.PhoneNumber = req.PhoneNumber
+	tenant.Logo = req.Logo
+	tenant.TermsOfService = req.TermsOfService
+
+	if err := h.tenantService.UpdateTenant(c.Request().Context(), tenant); err != nil {
+		h.logger.ErrorContext(c.Request().Context(), "failed to update tenant", "error", err, "tenant_id", tenantID)
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to update tenant")
+	}
+
+	response := WithHashID(
+		tenant.ID,
+		tenant.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		tenant.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		tenant,
+	)
+
+	return SuccessResponse(c, http.StatusOK, "Tenant updated successfully", response)
 }
 
 // UpdatePassword handles password update for the current user
