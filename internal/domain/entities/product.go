@@ -10,8 +10,8 @@ type Product struct {
 	Image      string    `json:"image"`
 	Name       string    `json:"name" gorm:"not null"`
 	SKU        *string   `json:"sku" gorm:"uniqueIndex:idx_tenant_sku"`
-	HargaModal float64   `json:"harga_modal" gorm:"not null"`
-	HargaJual  float64   `json:"harga_jual" gorm:"not null"`
+	HargaModal *float64  `json:"harga_modal"`
+	HargaJual  *float64  `json:"harga_jual"`
 	Stock      int       `json:"stock" gorm:"not null;default:0"`
 	TenantID   *uint     `json:"tenant_id" gorm:"uniqueIndex:idx_tenant_sku;index"`
 	Tenant     *Tenant   `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`

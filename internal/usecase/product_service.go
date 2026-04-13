@@ -85,9 +85,13 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 				product.SKU = &v
 			}
 		case "harga_modal":
-			product.HargaModal = value.(float64)
+			if v, ok := value.(float64); ok {
+				product.HargaModal = &v
+			}
 		case "harga_jual":
-			product.HargaJual = value.(float64)
+			if v, ok := value.(float64); ok {
+				product.HargaJual = &v
+			}
 		case "stock":
 			product.Stock = value.(int)
 		}
@@ -145,6 +149,18 @@ func (s *productService) CreateProduct(ctx context.Context, product *entities.Pr
 		if err == nil && existingProduct != nil {
 			return fmt.Errorf("product with SKU %s already exists", *product.SKU)
 		}
+	}
+
+	// Normalize prices: if one is nil, copy the other; both nil is invalid
+	switch {
+	case product.HargaJual != nil && product.HargaModal == nil:
+		v := *product.HargaJual
+		product.HargaModal = &v
+	case product.HargaModal != nil && product.HargaJual == nil:
+		v := *product.HargaModal
+		product.HargaJual = &v
+	case product.HargaJual == nil && product.HargaModal == nil:
+		return fmt.Errorf("at least one of harga_jual or harga_modal must be provided")
 	}
 
 	// Create product

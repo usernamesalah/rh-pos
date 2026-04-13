@@ -356,20 +356,12 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
 	}
 
-	// Create product entity
-	var hargaModal, hargaJual float64
-	if req.HargaModal != nil {
-		hargaModal = *req.HargaModal
-	}
-	if req.HargaJual != nil {
-		hargaJual = *req.HargaJual
-	}
 	product := &entities.Product{
 		Name:       req.Name,
 		SKU:        req.SKU,
 		Image:      req.Image,
-		HargaModal: hargaModal,
-		HargaJual:  hargaJual,
+		HargaModal: req.HargaModal,
+		HargaJual:  req.HargaJual,
 		Stock:      req.Stock,
 	}
 

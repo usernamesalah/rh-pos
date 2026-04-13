@@ -74,11 +74,16 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 				return fmt.Errorf("product not found: %w", err)
 			}
 
+			var hargaJual float64
+			if product.HargaJual != nil {
+				hargaJual = *product.HargaJual
+			}
+
 			transactionItem := entities.TransactionItem{
 				ProductID:    item.ProductID,
 				Quantity:     item.Quantity,
 				WarrantyDays: item.WarrantyDays,
-				Price:        product.HargaJual,
+				Price:        hargaJual,
 			}
 
 			// Check for active campaign discount
@@ -95,13 +100,13 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 						best = c
 					}
 				}
-				discountedPrice := product.HargaJual * (1 - best.DiscountPercentage/100)
+				discountedPrice := hargaJual * (1 - best.DiscountPercentage/100)
 				transactionItem.Price = discountedPrice
 				transactionItem.DiscountPercentage = best.DiscountPercentage
 				transactionItem.CampaignID = &best.ID
 				campaignDiscountedTotal += discountedPrice * float64(item.Quantity)
 			} else {
-				regularTotal += product.HargaJual * float64(item.Quantity)
+				regularTotal += hargaJual * float64(item.Quantity)
 			}
 
 			transaction.Items = append(transaction.Items, transactionItem)

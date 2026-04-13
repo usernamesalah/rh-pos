@@ -89,7 +89,7 @@ func TestCreateProduct_NilSKU_DoesNotCheckDuplicate(t *testing.T) {
 	svc := usecase.NewProductService(repo, nil, "", newLogger())
 	ctx := ctxWithTenant(1)
 
-	p := &entities.Product{Name: "Test", SKU: nil}
+	p := &entities.Product{Name: "Test", SKU: nil, HargaJual: ptr64(1000)}
 	if err := svc.CreateProduct(ctx, p); err != nil {
 		t.Fatalf("expected nil error for nil SKU product, got: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestDeleteProduct_ExistingProduct_Succeeds(t *testing.T) {
 	svc := usecase.NewProductService(repo, nil, "", newLogger())
 	ctx := ctxWithTenant(1)
 
-	p := &entities.Product{Name: "ToDelete"}
+	p := &entities.Product{Name: "ToDelete", HargaJual: ptr64(500)}
 	if err := svc.CreateProduct(ctx, p); err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
@@ -116,13 +116,78 @@ func TestCreateProduct_DuplicateSKU_ReturnsError(t *testing.T) {
 	ctx := ctxWithTenant(1)
 
 	sku := "SKU-001"
-	p1 := &entities.Product{Name: "First", SKU: &sku}
+	p1 := &entities.Product{Name: "First", SKU: &sku, HargaJual: ptr64(1000)}
 	if err := svc.CreateProduct(ctx, p1); err != nil {
 		t.Fatalf("first create failed: %v", err)
 	}
 
-	p2 := &entities.Product{Name: "Second", SKU: &sku}
+	p2 := &entities.Product{Name: "Second", SKU: &sku, HargaJual: ptr64(2000)}
 	if err := svc.CreateProduct(ctx, p2); err == nil {
 		t.Fatal("expected duplicate SKU error, got nil")
+	}
+}
+
+func ptr64(v float64) *float64 { return &v }
+
+func TestCreateProduct_OnlyHargaJual_CopiesHargaModal(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewProductService(repo, nil, "", newLogger())
+	ctx := ctxWithTenant(1)
+
+	p := &entities.Product{Name: "Test", HargaJual: ptr64(2000)}
+	if err := svc.CreateProduct(ctx, p); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if p.HargaModal == nil {
+		t.Fatal("expected HargaModal to be set, got nil")
+	}
+	if *p.HargaModal != 2000 {
+		t.Errorf("expected HargaModal=2000, got %v", *p.HargaModal)
+	}
+}
+
+func TestCreateProduct_OnlyHargaModal_CopiesHargaJual(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewProductService(repo, nil, "", newLogger())
+	ctx := ctxWithTenant(1)
+
+	p := &entities.Product{Name: "Test", HargaModal: ptr64(1500)}
+	if err := svc.CreateProduct(ctx, p); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if p.HargaJual == nil {
+		t.Fatal("expected HargaJual to be set, got nil")
+	}
+	if *p.HargaJual != 1500 {
+		t.Errorf("expected HargaJual=1500, got %v", *p.HargaJual)
+	}
+}
+
+func TestCreateProduct_BothPricesNil_ReturnsError(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewProductService(repo, nil, "", newLogger())
+	ctx := ctxWithTenant(1)
+
+	p := &entities.Product{Name: "Test"}
+	err := svc.CreateProduct(ctx, p)
+	if err == nil {
+		t.Fatal("expected validation error for both nil prices, got nil")
+	}
+}
+
+func TestCreateProduct_BothPricesSet_UsesAsIs(t *testing.T) {
+	repo := newMockRepo()
+	svc := usecase.NewProductService(repo, nil, "", newLogger())
+	ctx := ctxWithTenant(1)
+
+	p := &entities.Product{Name: "Test", HargaJual: ptr64(3000), HargaModal: ptr64(2000)}
+	if err := svc.CreateProduct(ctx, p); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if *p.HargaJual != 3000 || *p.HargaModal != 2000 {
+		t.Errorf("expected prices unchanged, got jual=%v modal=%v", *p.HargaJual, *p.HargaModal)
 	}
 }
