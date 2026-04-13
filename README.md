@@ -1,212 +1,202 @@
-# POS System API
+# RH POS API
 
-A complete Point of Sale (POS) system backend API built with Go and Echo framework.
+Backend API for a multi-tenant point of sale system built with Go, Echo, GORM, and MySQL.
 
-## 🚀 Features
+## Overview
 
-- **RESTful API**: Well-structured REST endpoints with proper HTTP status codes
-- **API Documentation**: Auto-generated Swagger/OpenAPI documentation
-- **Hot Reload**: Development server with automatic reload using Air
-- **Docker Support**: Full containerization with Docker and Docker Compose
-- **Structured Logging**: JSON-structured logging with slog
-- **Input Validation**: Request validation with proper error handling
-- **Environment Configuration**: Flexible configuration via `.env` files
+This service provides:
 
-## 🏗️ Architecture
+- JWT-protected `/api/*` endpoints for day-to-day POS operations
+- Basic Auth protected `/admin/*` endpoints for tenant bootstrap and admin setup
+- product, transaction, discount campaign, warranty, report, tenant, and user management
+- Swagger/OpenAPI docs at `/swagger/index.html`
+- local filesystem or MinIO-backed file storage
 
-This project follows **Clean Architecture** principles:
+## Architecture
 
-```
-cmd/                    # Application entry points
-└── main.go            # Main server application
+The codebase follows clean architecture:
 
-internal/              # Private application code
-├── domain/            # Domain layer (entities & interfaces)
-│   ├── entities/      # Domain entities
-│   └── interfaces/    # Repository & service interfaces
-├── usecase/           # Use case layer (business logic)
-├── repository/        # Repository layer (data access)
-├── handler/           # Handler layer (HTTP controllers)
-├── server/            # HTTP server setup
-├── config/            # Configuration management
-└── pkg/               # Shared packages
-    └── database/      # Database utilities
+```text
+handler -> usecase -> repository -> database
 ```
 
-## 🛠️ Tech Stack
+Main directories:
 
-- **Language**: Go 1.24
-- **Web Framework**: Echo v4
-- **Database**: MySQL 8.0
-- **ORM**: GORM
-- **Logging**: slog (structured logging)
-- **Validation**: go-playground/validator
-- **Documentation**: Swagger/OpenAPI 3.0
-- **Hot Reload**: Air
-- **Containerization**: Docker & Docker Compose
+```text
+cmd/                 application entrypoint
+internal/domain/     entities and interfaces
+internal/usecase/    business logic
+internal/repository/ data access with GORM
+internal/handler/    HTTP handlers
+internal/server/     router and middleware setup
+internal/pkg/        shared packages
+migrations/          SQL migrations
+docs/                Swagger and project docs
+```
 
-## 📋 Prerequisites
+## Requirements
 
-- Go 1.24 or higher
-- MySQL 8.0 or higher
-- Docker and Docker Compose (for containerized setup)
-- Make (optional, for using Makefile commands)
+- Go 1.24+
+- MySQL 8+
+- Docker and Docker Compose for containerized development
+- Make optional but convenient
 
-## 🚀 Quick Start
+## Configuration
 
-### 1. Clone the Repository
+Copy the example environment file:
 
 ```bash
-git clone <repository-url>
-cd rh-pos
+cp .env.example .env
 ```
 
-### 2. Setup Development Environment
+Required values before startup:
+
+- `JWT_SECRET` must be set to a secure non-default value
+- `HASHID_SALT` is required and must be at least 16 characters
+- `ADMIN_USERNAME` and `ADMIN_PASSWORD` are required
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` must point to a working MySQL database
+- if `STORAGE_TYPE=minio`, `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` are required
+
+Useful optional values:
+
+- `SERVER_HOST` default `0.0.0.0`
+- `SERVER_PORT` default `8080`
+- `CORS_ALLOWED_ORIGINS` comma-separated list
+- `LOG_LEVEL` default `info`
+- `LOCAL_STORAGE_PATH` when `STORAGE_TYPE=local`
+- `STORAGE_BASE_URL` for local file URLs
+
+Storage options:
+
+- `STORAGE_TYPE=local` for simple local development
+- `STORAGE_TYPE=minio` for object storage
+
+## Local Development
+
+Build the binary:
 
 ```bash
-# Install dependencies and development tools
-make setup
+go build -o bin/rh-pos cmd/main.go
 ```
 
-### 3. Environment Configuration
-
-**Important**: Create a `.env` file from the provided template:
+Run migrations:
 
 ```bash
-# Copy the example environment file
-cp env.example .env
+./bin/rh-pos migrate up
 ```
 
-**Edit the `.env` file** with your specific configuration:
+Start the server:
 
 ```bash
-# Server Configuration
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-
-# Database Configuration
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_secure_password
-DB_NAME=rh_pos
-
-# Logger Configuration
-LOG_LEVEL=info
-```
-
-### 4. Run the Application
-
-#### Development Mode (with Hot Reload)
-
-```bash
-make dev
-# or
-air
-```
-
-#### Production Mode
-
-```bash
-make build
 ./bin/rh-pos
 ```
 
-#### Docker Mode
+On Windows, use `bin/rh-pos.exe` instead.
+
+## Docker Development
+
+The repository includes a Docker Compose setup with hot reload via Air:
 
 ```bash
-# Build and run everything with Docker (reads .env automatically)
-make docker-up
-
-# Or just the application (if you have MySQL running separately)
-make docker-build
-docker run -p 8080:8080 --env-file .env rh-pos
+make dev
 ```
 
-The API will be available at `http://localhost:8080`
-
-## 📚 API Documentation
-
-### Interactive API Documentation
-
-Once the server is running, visit:
-- **Swagger UI**: `http://localhost:8080/swagger/index.html`
-- **Health Check**: `http://localhost:8080/health`
-
-## 🐳 Docker Deployment
-
-### Development with Docker Compose
+Useful commands:
 
 ```bash
-# Start all services (MySQL + App)
-make docker-up
-
-# View logs
-make docker-logs
-
-# Stop all services
-make docker-down
+make dev-down
+make dev-logs
+make prod
+make prod-down
+make prod-logs
 ```
 
-### Production Deployment
+Note: `docker-compose.yml` expects the external Docker network `usernamesalah` to exist.
 
-1. **Build the image**:
+Create it if needed:
+
 ```bash
-docker build -t rh-pos .
+docker network create usernamesalah
 ```
 
-2. **Run with environment variables**:
+## Build, Test, Lint
+
+Build:
+
 ```bash
-docker run -d \
-  --name rh-pos \
-  -p 8080:8080 \
-  -e DB_HOST=your-mysql-host \
-  -e DB_USER=your-db-user \
-  -e DB_PASSWORD=your-db-password \
-  -e DB_NAME=rh_pos \
-  rh-pos
+make build
 ```
 
-3. **Or use Docker Compose with production overrides**:
+Test:
+
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+go test -v ./...
 ```
 
-## 🔐 Security Considerations
+Lint:
 
-- **Database**: Use strong database passwords
-- **HTTPS**: Always use HTTPS in production
-- **Environment Variables**: Never commit sensitive data to version control
-- **Input Validation**: All inputs are validated before processing
-- **SQL Injection**: Protected by GORM's prepared statements
+```bash
+golangci-lint run
+```
 
-## 🤝 Contributing
+## Database Commands
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+The compiled binary exposes migration and seed commands:
 
-## 📄 License
+```bash
+./bin/rh-pos migrate up
+./bin/rh-pos migrate down
+./bin/rh-pos migrate status
+./bin/rh-pos seed
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Or via `make`:
 
-## 🐛 Troubleshooting
+```bash
+make migrate-up
+make migrate-down
+make migrate-status
+make seed
+```
 
-### Common Issues
+## API Access
 
-1. **Database Connection Failed**:
-   - Ensure MySQL is running
-   - Check database credentials in `.env`
-   - Verify database exists
+Public endpoints:
 
-2. **Port Already in Use**:
-   - Change `SERVER_PORT` in `.env`
-   - Kill process using port 8080: `lsof -ti:8080 | xargs kill`
+- `GET /health`
+- `GET /swagger/index.html`
+- `GET /warranty/search`
+- `GET /warranty/:transaction_id`
 
-### Getting Help
+Authentication:
 
-1. Check the logs: `docker-compose logs` or `air` output
-2. Verify configuration: Ensure all environment variables are set
-3. Database status: Check if MySQL is accessible 
+- `POST /auth/login` returns a JWT for `/api/*`
+- `/admin/*` uses HTTP Basic Auth with `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+- `/api/*` uses JWT Bearer auth
+
+Main API groups:
+
+- `/api/products`
+- `/api/transactions`
+- `/api/reports`
+- `/api/discount-campaigns`
+- `/api/users`
+- `/api/my-tenant`
+
+## Multi-Tenancy Notes
+
+- tenant context is derived from JWT claims on `/api/*`
+- IDs exposed by the API are hashed IDs, not raw database IDs
+- report and product/campaign access is tenant-scoped
+
+## Troubleshooting
+
+- If startup fails, verify `.env` values first
+- If migrations fail, ensure the binary was built before running migration commands
+- If `make dev` fails, check that the external Docker network `usernamesalah` exists
+- If `STORAGE_TYPE=minio`, verify MinIO credentials and endpoint configuration
+- If JWT auth fails, make sure the frontend is sending `Authorization: Bearer <token>`
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` if present in your deployment context.
