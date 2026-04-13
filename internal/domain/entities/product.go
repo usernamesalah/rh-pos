@@ -9,7 +9,7 @@ type Product struct {
 	ID         uint      `json:"id" gorm:"primaryKey"`
 	Image      string    `json:"image"`
 	Name       string    `json:"name" gorm:"not null"`
-	SKU        string    `json:"sku" gorm:"uniqueIndex:idx_tenant_sku;not null"`
+	SKU        *string   `json:"sku" gorm:"uniqueIndex:idx_tenant_sku"`
 	HargaModal float64   `json:"harga_modal" gorm:"not null"`
 	HargaJual  float64   `json:"harga_jual" gorm:"not null"`
 	Stock      int       `json:"stock" gorm:"not null;default:0"`

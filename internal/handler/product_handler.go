@@ -44,12 +44,12 @@ type UpdateStockRequest struct {
 
 // CreateProductRequest represents the create product request
 type CreateProductRequest struct {
-	Name       string  `json:"name" validate:"required"`
-	SKU        string  `json:"sku" validate:"required"`
-	Image      string  `json:"image,omitempty"`
-	HargaModal float64 `json:"harga_modal" validate:"required,min=0"`
-	HargaJual  float64 `json:"harga_jual" validate:"required,min=0"`
-	Stock      int     `json:"stock" validate:"required,min=0"`
+	Name       string   `json:"name" validate:"required"`
+	SKU        *string  `json:"sku,omitempty"`
+	Image      string   `json:"image,omitempty"`
+	HargaModal *float64 `json:"harga_modal,omitempty"`
+	HargaJual  *float64 `json:"harga_jual,omitempty"`
+	Stock      int      `json:"stock" validate:"min=0"`
 }
 
 // GetUploadURLRequest represents the request for getting an upload URL
@@ -357,12 +357,19 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	}
 
 	// Create product entity
+	var hargaModal, hargaJual float64
+	if req.HargaModal != nil {
+		hargaModal = *req.HargaModal
+	}
+	if req.HargaJual != nil {
+		hargaJual = *req.HargaJual
+	}
 	product := &entities.Product{
 		Name:       req.Name,
 		SKU:        req.SKU,
 		Image:      req.Image,
-		HargaModal: req.HargaModal,
-		HargaJual:  req.HargaJual,
+		HargaModal: hargaModal,
+		HargaJual:  hargaJual,
 		Stock:      req.Stock,
 	}
 

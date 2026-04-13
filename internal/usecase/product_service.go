@@ -81,7 +81,9 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 		case "name":
 			product.Name = value.(string)
 		case "sku":
-			product.SKU = value.(string)
+			if v, ok := value.(string); ok {
+				product.SKU = &v
+			}
 		case "harga_modal":
 			product.HargaModal = value.(float64)
 		case "harga_jual":
@@ -122,7 +124,11 @@ func (s *productService) UpdateStock(ctx context.Context, id uint, stock int) (*
 
 // CreateProduct creates a new product
 func (s *productService) CreateProduct(ctx context.Context, product *entities.Product) error {
-	s.logger.InfoContext(ctx, "creating product", "sku", product.SKU)
+	var skuStr string
+	if product.SKU != nil {
+		skuStr = *product.SKU
+	}
+	s.logger.InfoContext(ctx, "creating product", "sku", skuStr)
 
 	// Get tenant_id from context
 	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
@@ -133,10 +139,12 @@ func (s *productService) CreateProduct(ctx context.Context, product *entities.Pr
 	// Set tenant_id
 	product.TenantID = &tenantID
 
-	// Check if SKU already exists
-	existingProduct, err := s.productRepo.GetBySKU(ctx, product.SKU)
-	if err == nil && existingProduct != nil {
-		return fmt.Errorf("product with SKU %s already exists", product.SKU)
+	// Check for duplicate SKU only when SKU is provided
+	if product.SKU != nil {
+		existingProduct, err := s.productRepo.GetBySKU(ctx, *product.SKU)
+		if err == nil && existingProduct != nil {
+			return fmt.Errorf("product with SKU %s already exists", *product.SKU)
+		}
 	}
 
 	// Create product
