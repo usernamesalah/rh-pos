@@ -72,6 +72,8 @@ type TenantService interface {
 	ListTenants(ctx context.Context) ([]*entities.Tenant, error)
 	UpdateTenant(ctx context.Context, tenant *entities.Tenant) error
 	DeleteTenant(ctx context.Context, id uint) error
+	UploadTenantLogo(ctx context.Context, tenantID uint, fileData []byte, contentType string) (*entities.Tenant, error)
+	GetTenantLogoURL(ctx context.Context, tenant *entities.Tenant) (string, error)
 }
 
 // CreateTransactionRequest represents the request to create a transaction

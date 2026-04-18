@@ -518,7 +518,7 @@ func (h *ProductHandler) UploadProductImage(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to read uploaded file")
 	}
 
-	// Upload image to MinIO
+	// Upload image to S3-compatible storage
 	product, err := h.productService.UploadProductImage(ctx, id, fileData, file.Header.Get("Content-Type"))
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to upload product image", "error", err)

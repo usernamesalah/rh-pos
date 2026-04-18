@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"github.com/usernamesalah/rh-pos/internal/domain/apperrors"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"gorm.io/gorm"
 )
@@ -60,7 +63,6 @@ type UpdateMyTenantRequest struct {
 	About          string `json:"about"`
 	Address        string `json:"address"`
 	PhoneNumber    string `json:"phone_number"`
-	Logo           string `json:"logo"`
 	TermsOfService string `json:"terms_of_service"`
 }
 
@@ -182,11 +184,20 @@ func (h *AuthHandler) GetMyTenant(c echo.Context) error {
 		return ErrorResponse(c, http.StatusNotFound, "Tenant not found")
 	}
 
+	logoURL, _ := h.tenantService.GetTenantLogoURL(c.Request().Context(), tenant)
+
 	response := WithHashID(
 		tenant.ID,
 		tenant.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		tenant.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		tenant,
+		map[string]interface{}{
+			"name":            tenant.Name,
+			"about":           tenant.About,
+			"address":         tenant.Address,
+			"phone_number":   tenant.PhoneNumber,
+			"logo_url":        logoURL,
+			"terms_of_service": tenant.TermsOfService,
+		},
 	)
 
 	return SuccessResponse(c, http.StatusOK, "Tenant information retrieved successfully", response)
@@ -226,7 +237,6 @@ func (h *AuthHandler) UpdateMyTenant(c echo.Context) error {
 	tenant.About = req.About
 	tenant.Address = req.Address
 	tenant.PhoneNumber = req.PhoneNumber
-	tenant.Logo = req.Logo
 	tenant.TermsOfService = req.TermsOfService
 
 	if err := h.tenantService.UpdateTenant(c.Request().Context(), tenant); err != nil {
@@ -234,14 +244,84 @@ func (h *AuthHandler) UpdateMyTenant(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to update tenant")
 	}
 
+	logoURL, _ := h.tenantService.GetTenantLogoURL(c.Request().Context(), tenant)
+
 	response := WithHashID(
 		tenant.ID,
 		tenant.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		tenant.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		tenant,
+		map[string]interface{}{
+			"name":            tenant.Name,
+			"about":           tenant.About,
+			"address":         tenant.Address,
+			"phone_number":   tenant.PhoneNumber,
+			"logo_url":        logoURL,
+			"terms_of_service": tenant.TermsOfService,
+		},
 	)
 
 	return SuccessResponse(c, http.StatusOK, "Tenant updated successfully", response)
+}
+
+// UploadMyTenantLogo handles uploading a logo for the current tenant
+// @Summary Upload tenant logo
+// @Description Upload a logo image for the current tenant (admin only)
+// @Tags Authentication
+// @Accept multipart/form-data
+// @Produce json
+// @Security bearerAuth
+// @Param file formData file true "Logo file"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 401 {object} Response
+// @Failure 500 {object} Response
+// @Router /api/my-tenant/logo [post]
+func (h *AuthHandler) UploadMyTenantLogo(c echo.Context) error {
+	tenantID, ok := c.Get("tenant_id").(uint)
+	if !ok {
+		return ErrorResponse(c, http.StatusUnauthorized, "Tenant information not available")
+	}
+
+	if err := c.Request().ParseMultipartForm(32 << 20); err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, "Failed to parse form data")
+	}
+
+	form := c.Request().MultipartForm
+	files, ok := form.File["file"]
+	if !ok || len(files) == 0 {
+		return ErrorResponse(c, http.StatusBadRequest, "Logo file is required")
+	}
+
+	file := files[0]
+	src, err := file.Open()
+	if err != nil {
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to process uploaded file")
+	}
+	defer src.Close()
+
+	fileData, err := io.ReadAll(src)
+	if err != nil {
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to read uploaded file")
+	}
+
+	ctx := context.WithValue(c.Request().Context(), ctxkey.TenantID, tenantID)
+	tenant, err := h.tenantService.UploadTenantLogo(ctx, tenantID, fileData, file.Header.Get("Content-Type"))
+	if err != nil {
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to upload logo")
+	}
+
+	logoURL, _ := h.tenantService.GetTenantLogoURL(c.Request().Context(), tenant)
+
+	response := map[string]interface{}{
+		"name":            tenant.Name,
+		"about":           tenant.About,
+		"address":         tenant.Address,
+		"phone_number":   tenant.PhoneNumber,
+		"logo_url":        logoURL,
+		"terms_of_service": tenant.TermsOfService,
+	}
+
+	return SuccessResponse(c, http.StatusOK, "Logo uploaded successfully", response)
 }
 
 // UpdatePassword handles password update for the current user

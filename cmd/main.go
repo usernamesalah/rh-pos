@@ -32,7 +32,7 @@ import (
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
 	local "github.com/usernamesalah/rh-pos/internal/pkg/storage/local"
-	minioclient "github.com/usernamesalah/rh-pos/internal/pkg/storage/minio"
+	s3client "github.com/usernamesalah/rh-pos/internal/pkg/storage/s3"
 	"github.com/usernamesalah/rh-pos/internal/repository"
 	"github.com/usernamesalah/rh-pos/internal/server"
 	"github.com/usernamesalah/rh-pos/internal/usecase"
@@ -102,7 +102,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	productUseCase := usecase.NewProductService(productRepo, storageClient, storageBaseURL, appLogger)
 	transactionUseCase := usecase.NewTransactionService(transactionRepo, productRepo, campaignRepo, db, appLogger)
 	reportUseCase := usecase.NewReportService(transactionRepo, appLogger)
-	tenantUseCase := usecase.NewTenantService(tenantRepo, appLogger)
+	tenantUseCase := usecase.NewTenantService(tenantRepo, storageClient, storageBaseURL, appLogger)
 	campaignUseCase := usecase.NewDiscountCampaignService(campaignRepo, auditLogRepo, appLogger)
 	warrantyUseCase := usecase.NewWarrantyService(transactionRepo, appLogger)
 
@@ -179,18 +179,21 @@ func newStorageClient(cfg *config.Config, logger *slog.Logger) (storage.StorageC
 		logger.Info("using local filesystem storage", "path", cfg.Storage.LocalPath)
 		return local.NewClient(cfg.Storage.LocalPath, logger)
 	case "minio":
-		logger.Info("using MinIO storage", "endpoint", cfg.MinIO.Endpoint)
-		minioConfig := &minioclient.Config{
-			Endpoint:        cfg.MinIO.Endpoint,
-			AccessKeyID:     cfg.MinIO.AccessKeyID,
-			SecretAccessKey: cfg.MinIO.SecretAccessKey,
-			UseSSL:          cfg.MinIO.UseSSL,
-			Region:          cfg.MinIO.Region,
-			Bucket:          cfg.MinIO.Bucket,
-			DefaultExpiry:   cfg.MinIO.DefaultExpiry,
+		logger.Info("using S3-compatible storage (deprecated, use STORAGE_TYPE=s3)", "endpoint", cfg.S3.Endpoint)
+		fallthrough
+	case "s3":
+		logger.Info("using S3-compatible storage", "endpoint", cfg.S3.Endpoint)
+		s3Config := &s3client.Config{
+			Endpoint:        cfg.S3.Endpoint,
+			AccessKeyID:     cfg.S3.AccessKeyID,
+			SecretAccessKey: cfg.S3.SecretAccessKey,
+			UseSSL:          cfg.S3.UseSSL,
+			Region:          cfg.S3.Region,
+			Bucket:          cfg.S3.Bucket,
+			DefaultExpiry:   cfg.S3.DefaultExpiry,
 		}
-		return minioclient.NewClient(minioConfig, logger)
+		return s3client.NewClient(s3Config, logger)
 	default:
-		return nil, fmt.Errorf("unknown STORAGE_TYPE %q: must be 'local' or 'minio'", cfg.Storage.Type)
+		return nil, fmt.Errorf("unknown STORAGE_TYPE %q: must be 'local' or 's3'", cfg.Storage.Type)
 	}
 }

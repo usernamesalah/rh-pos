@@ -80,6 +80,7 @@ func SetupRouter(
 	admin.GET("/tenants", adminHandler.ListTenants)
 	admin.GET("/tenants/:id", adminHandler.GetTenant)
 	admin.PUT("/tenants/:id", adminHandler.UpdateTenant)
+	admin.POST("/tenants/:id/logo", adminHandler.UpdateTenantLogo)
 	admin.POST("/users", adminHandler.CreateUser)
 
 	// Protected routes
@@ -130,6 +131,7 @@ func SetupRouter(
 	api.GET("/profile", authHandler.GetProfile)
 	api.GET("/my-tenant", authHandler.GetMyTenant)
 	api.PUT("/my-tenant", authHandler.UpdateMyTenant, adminMiddleware.AdminOnly)
+	api.POST("/my-tenant/logo", authHandler.UploadMyTenantLogo, adminMiddleware.AdminOnly)
 	api.PUT("/update-password", authHandler.UpdatePassword)
 	api.GET("/users", authHandler.ListUsers)
 	api.POST("/users", authHandler.CreateUser)

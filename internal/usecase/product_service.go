@@ -219,7 +219,7 @@ func (s *productService) GetProductUploadURL(ctx context.Context, product *entit
 	return url, key, nil
 }
 
-// UploadProductImage uploads a product image directly to MinIO
+// UploadProductImage uploads a product image directly to S3-compatible storage
 func (s *productService) UploadProductImage(ctx context.Context, productID uint, fileData []byte, contentType string) (*entities.Product, error) {
 	s.logger.InfoContext(ctx, "uploading product image", "product_id", productID)
 
@@ -245,7 +245,7 @@ func (s *productService) UploadProductImage(ctx context.Context, productID uint,
 	// Generate image key
 	key := storage.GenerateImageKey(product.ID, ext)
 
-	// Upload file to MinIO
+	// Upload file to S3-compatible storage
 	if err := s.storage.UploadBytes(ctx, key, fileData, contentType); err != nil {
 		return nil, fmt.Errorf("failed to upload image: %w", err)
 	}

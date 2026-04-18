@@ -15,7 +15,7 @@ type ObjectInfo struct {
 }
 
 // StorageClient defines the interface for storage operations.
-// Both the MinIO and local filesystem implementations satisfy this interface.
+// Both the S3-compatible and local filesystem implementations satisfy this interface.
 type StorageClient interface {
 	Upload(ctx context.Context, key string, reader io.Reader, contentType string) error
 	UploadBytes(ctx context.Context, key string, data []byte, contentType string) error

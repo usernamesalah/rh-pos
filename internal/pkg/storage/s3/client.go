@@ -1,4 +1,4 @@
-package minio
+package s3
 
 import (
 	"bytes"
@@ -9,8 +9,10 @@ import (
 	"path"
 	"time"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 	"github.com/usernamesalah/rh-pos/internal/pkg/hash"
 	"github.com/usernamesalah/rh-pos/internal/pkg/storage"
@@ -18,55 +20,43 @@ import (
 
 const maxDownloadSize = 10 << 20 // 10 MB
 
-// Client implements the StorageClient interface for MinIO
 type Client struct {
-	client *minio.Client
-	config *Config
+	client *s3.Client
+	bucket string
 	logger *slog.Logger
 }
 
-// NewClient creates a new MinIO client with the given configuration
-func NewClient(config *Config, logger *slog.Logger) (*Client, error) {
-	if config == nil {
+func NewClient(cfg *Config, logger *slog.Logger) (*Client, error) {
+	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
 
-	logger.Info("initializing MinIO client", "endpoint", config.Endpoint, "bucket", config.Bucket)
+	logger.Info("initializing S3 client", "endpoint", cfg.Endpoint, "bucket", cfg.Bucket)
 
-	// Create MinIO client
-	minioClient, err := minio.New(config.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(config.AccessKeyID, config.SecretAccessKey, ""),
-		Secure: config.UseSSL,
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			cfg.AccessKeyID,
+			cfg.SecretAccessKey,
+			"",
+		)),
+		awsconfig.WithRegion(cfg.Region),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(cfg.Endpoint)
+		o.UsePathStyle = false
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
-	}
-
-	// Check if bucket exists
-	exists, err := minioClient.BucketExists(context.Background(), config.Bucket)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if bucket exists: %w", err)
-	}
-
-	logger.Info("bucket check", "bucket", config.Bucket, "exists", exists)
-
-	// Create bucket if it doesn't exist
-	if !exists {
-		logger.Info("creating bucket", "bucket", config.Bucket)
-		err = minioClient.MakeBucket(context.Background(), config.Bucket, minio.MakeBucketOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create bucket: %w", err)
-		}
-	}
 
 	return &Client{
-		client: minioClient,
-		config: config,
+		client: s3Client,
+		bucket: cfg.Bucket,
 		logger: logger,
 	}, nil
 }
 
-// getTenantIDFromContext extracts and hashes the tenant ID from context
 func (c *Client) getTenantIDFromContext(ctx context.Context) (string, error) {
 	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
 	if !ok {
@@ -77,7 +67,6 @@ func (c *Client) getTenantIDFromContext(ctx context.Context) (string, error) {
 	return hashedID, nil
 }
 
-// getTenantKey returns the full key with tenant prefix
 func (c *Client) getTenantKey(ctx context.Context, key string) (string, error) {
 	tenantID, err := c.getTenantIDFromContext(ctx)
 	if err != nil {
@@ -86,43 +75,51 @@ func (c *Client) getTenantKey(ctx context.Context, key string) (string, error) {
 	return path.Join(tenantID, key), nil
 }
 
-// Upload uploads an object to MinIO
 func (c *Client) Upload(ctx context.Context, key string, reader io.Reader, contentType string) error {
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
 		return storage.NewStorageError("upload", key, err)
 	}
 
-	_, err = c.client.PutObject(ctx, c.config.Bucket, objectKey, reader, -1,
-		minio.PutObjectOptions{ContentType: contentType})
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return storage.NewStorageError("upload", key, err)
+	}
+
+	_, err = c.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(c.bucket),
+		Key:         aws.String(objectKey),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+	})
 	if err != nil {
 		return storage.NewStorageError("upload", key, err)
 	}
 	return nil
 }
 
-// UploadBytes uploads a byte array to MinIO
 func (c *Client) UploadBytes(ctx context.Context, key string, data []byte, contentType string) error {
 	reader := bytes.NewReader(data)
 	return c.Upload(ctx, key, reader, contentType)
 }
 
-// Download downloads an object from MinIO
 func (c *Client) Download(ctx context.Context, key string) (io.ReadCloser, error) {
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
 		return nil, storage.NewStorageError("download", key, err)
 	}
 
-	object, err := c.client.GetObject(ctx, c.config.Bucket, objectKey, minio.GetObjectOptions{})
+	result, err := c.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(objectKey),
+	})
 	if err != nil {
 		return nil, storage.NewStorageError("download", key, err)
 	}
-	return object, nil
+
+	return result.Body, nil
 }
 
-// DownloadBytes downloads an object from MinIO and returns its contents as bytes.
-// Returns an error if the object exceeds maxDownloadSize (10 MB).
 func (c *Client) DownloadBytes(ctx context.Context, key string) ([]byte, error) {
 	reader, err := c.Download(ctx, key)
 	if err != nil {
@@ -142,21 +139,22 @@ func (c *Client) DownloadBytes(ctx context.Context, key string) ([]byte, error) 
 	return data, nil
 }
 
-// Delete deletes an object from MinIO
 func (c *Client) Delete(ctx context.Context, key string) error {
 	objectKey, err := c.getTenantKey(ctx, key)
 	if err != nil {
 		return storage.NewStorageError("delete", key, err)
 	}
 
-	err = c.client.RemoveObject(ctx, c.config.Bucket, objectKey, minio.RemoveObjectOptions{})
+	_, err = c.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(objectKey),
+	})
 	if err != nil {
 		return storage.NewStorageError("delete", key, err)
 	}
 	return nil
 }
 
-// List lists objects in a prefix
 func (c *Client) List(ctx context.Context, prefix string) ([]storage.ObjectInfo, error) {
 	tenantID, err := c.getTenantIDFromContext(ctx)
 	if err != nil {
@@ -164,32 +162,31 @@ func (c *Client) List(ctx context.Context, prefix string) ([]storage.ObjectInfo,
 	}
 
 	tenantPrefix := path.Join(tenantID, prefix)
-	objects := make([]storage.ObjectInfo, 0)
 
-	objectCh := c.client.ListObjects(ctx, c.config.Bucket, minio.ListObjectsOptions{
-		Prefix:    tenantPrefix,
-		Recursive: true,
+	result, err := c.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String(c.bucket),
+		Prefix: aws.String(tenantPrefix),
 	})
+	if err != nil {
+		return nil, storage.NewStorageError("list", prefix, err)
+	}
 
-	for object := range objectCh {
-		if object.Err != nil {
-			return nil, storage.NewStorageError("list", prefix, object.Err)
-		}
+	objects := make([]storage.ObjectInfo, 0, len(result.Contents))
+	for _, obj := range result.Contents {
 		objects = append(objects, storage.ObjectInfo{
-			Key:          object.Key,
-			Size:         object.Size,
-			LastModified: object.LastModified,
-			ETag:         object.ETag,
+			Key:          *obj.Key,
+			Size:         *obj.Size,
+			LastModified: *obj.LastModified,
+			ETag:          *obj.ETag,
 		})
 	}
 
 	return objects, nil
 }
 
-// GeneratePresignedURL generates a presigned URL for upload or download
 func (c *Client) GeneratePresignedURL(ctx context.Context, key string, expiry time.Duration, isUpload bool) (string, error) {
 	if expiry == 0 {
-		expiry = c.config.DefaultExpiry
+		expiry = time.Hour
 	}
 
 	objectKey, err := c.getTenantKey(ctx, key)
@@ -199,18 +196,26 @@ func (c *Client) GeneratePresignedURL(ctx context.Context, key string, expiry ti
 
 	c.logger.DebugContext(ctx, "generating presigned URL", "key", objectKey, "is_upload", isUpload)
 
+	presignClient := s3.NewPresignClient(c.client)
+
 	if isUpload {
-		presignedURL, err := c.client.PresignedPutObject(ctx, c.config.Bucket, objectKey, expiry)
+		presigned, err := presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(c.bucket),
+			Key:    aws.String(objectKey),
+		}, s3.WithPresignExpires(expiry))
 		if err != nil {
 			return "", storage.NewStorageError("presign", key, err)
 		}
-		return presignedURL.String(), nil
+		return presigned.URL, nil
 	}
 
-	presignedURL, err := c.client.PresignedGetObject(ctx, c.config.Bucket, objectKey, expiry, nil)
+	presigned, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(objectKey),
+	}, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", storage.NewStorageError("presign", key, err)
 	}
 
-	return presignedURL.String(), nil
+	return presigned.URL, nil
 }

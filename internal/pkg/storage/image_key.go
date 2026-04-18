@@ -32,3 +32,13 @@ func GenerateImageKey(productID uint, ext string) string {
 func GetImageExtension(filename string) string {
 	return filepath.Ext(filename)
 }
+
+// GenerateLogoKey generates a unique logo key for a tenant
+// Format: tenants/{hashed_tenant_id}_logo.{ext}
+func GenerateLogoKey(tenantID uint, ext string) string {
+	hashID := hash.HashID(tenantID)
+	if len(ext) > 0 && ext[0] == '.' {
+		ext = ext[1:]
+	}
+	return fmt.Sprintf("tenants/%s_logo.%s", hashID, ext)
+}

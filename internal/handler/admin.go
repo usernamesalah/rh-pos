@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
+	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
 )
 
 type AdminHandler struct {
@@ -71,7 +74,20 @@ func (h *AdminHandler) GetTenant(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, tenant)
+	ctx := context.WithValue(c.Request().Context(), ctxkey.TenantID, tenant.ID)
+	logoURL, _ := h.tenantService.GetTenantLogoURL(ctx, tenant)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"id":              tenant.ID,
+		"name":            tenant.Name,
+		"about":           tenant.About,
+		"address":         tenant.Address,
+		"phone_number":   tenant.PhoneNumber,
+		"logo_url":        logoURL,
+		"terms_of_service": tenant.TermsOfService,
+		"created_at":      tenant.CreatedAt,
+		"updated_at":      tenant.UpdatedAt,
+	})
 }
 
 // UpdateTenant handles tenant updates
@@ -125,7 +141,24 @@ func (h *AdminHandler) ListTenants(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, tenants)
+	result := make([]map[string]interface{}, 0, len(tenants))
+	for _, tenant := range tenants {
+		ctx := context.WithValue(c.Request().Context(), ctxkey.TenantID, tenant.ID)
+		logoURL, _ := h.tenantService.GetTenantLogoURL(ctx, tenant)
+		result = append(result, map[string]interface{}{
+			"id":                tenant.ID,
+			"name":              tenant.Name,
+			"about":             tenant.About,
+			"address":           tenant.Address,
+			"phone_number":     tenant.PhoneNumber,
+			"logo_url":          logoURL,
+			"terms_of_service":  tenant.TermsOfService,
+			"created_at":        tenant.CreatedAt,
+			"updated_at":        tenant.UpdatedAt,
+		})
+	}
+
+	return c.JSON(http.StatusOK, result)
 }
 
 type adminCreateUserRequest struct {
@@ -169,4 +202,67 @@ func (h *AdminHandler) CreateUser(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, user)
+}
+
+// UpdateTenantLogo handles uploading a logo for a tenant
+// @Summary Upload tenant logo
+// @Description Upload a logo image for a tenant
+// @Tags Admin
+// @Accept multipart/form-data
+// @Produce json
+// @Security basicAuth
+// @Param id path int true "Tenant ID"
+// @Param file formData file true "Logo file"
+// @Success 200 {object} entities.Tenant
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /admin/tenants/{id}/logo [post]
+func (h *AdminHandler) UpdateTenantLogo(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid tenant ID"})
+	}
+
+	if err := c.Request().ParseMultipartForm(32 << 20); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Failed to parse form data"})
+	}
+
+	form := c.Request().MultipartForm
+	files, ok := form.File["file"]
+	if !ok || len(files) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Logo file is required"})
+	}
+
+	file := files[0]
+	src, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to process uploaded file"})
+	}
+	defer src.Close()
+
+	fileData, err := io.ReadAll(src)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to read uploaded file"})
+	}
+
+	ctx := context.WithValue(c.Request().Context(), ctxkey.TenantID, uint(id))
+	tenant, err := h.tenantService.UploadTenantLogo(ctx, uint(id), fileData, file.Header.Get("Content-Type"))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	logoURL, _ := h.tenantService.GetTenantLogoURL(c.Request().Context(), tenant)
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"id":              tenant.ID,
+		"name":            tenant.Name,
+		"about":           tenant.About,
+		"address":         tenant.Address,
+		"phone_number":   tenant.PhoneNumber,
+		"logo_url":        logoURL,
+		"terms_of_service": tenant.TermsOfService,
+		"created_at":      tenant.CreatedAt,
+		"updated_at":      tenant.UpdatedAt,
+	})
 }

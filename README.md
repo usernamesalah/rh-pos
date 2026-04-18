@@ -10,7 +10,7 @@ This service provides:
 - Basic Auth protected `/admin/*` endpoints for tenant bootstrap and admin setup
 - product, transaction, discount campaign, warranty, report, tenant, and user management
 - Swagger/OpenAPI docs at `/swagger/index.html`
-- local filesystem or MinIO-backed file storage
+- local filesystem or S3-compatible object storage (MinIO, Cloudflare R2, AWS S3, etc.)
 
 ## Architecture
 
@@ -55,7 +55,7 @@ Required values before startup:
 - `HASHID_SALT` is required and must be at least 16 characters
 - `ADMIN_USERNAME` and `ADMIN_PASSWORD` are required
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` must point to a working MySQL database
-- if `STORAGE_TYPE=minio`, `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` are required
+- if `STORAGE_TYPE=s3`, `S3_ACCESS_KEY` and `S3_SECRET_KEY` are required
 
 Useful optional values:
 
@@ -69,7 +69,7 @@ Useful optional values:
 Storage options:
 
 - `STORAGE_TYPE=local` for simple local development
-- `STORAGE_TYPE=minio` for object storage
+- `STORAGE_TYPE=s3` for S3-compatible object storage (MinIO, Cloudflare R2, AWS S3, DigitalOcean Spaces, Backblaze B2, etc.)
 
 ## Local Development
 
@@ -194,7 +194,7 @@ Main API groups:
 - If startup fails, verify `.env` values first
 - If migrations fail, ensure the binary was built before running migration commands
 - If `make dev` fails, check that the external Docker network `usernamesalah` exists
-- If `STORAGE_TYPE=minio`, verify MinIO credentials and endpoint configuration
+- If `STORAGE_TYPE=s3`, verify S3-compatible storage credentials and endpoint configuration
 - If JWT auth fails, make sure the frontend is sending `Authorization: Bearer <token>`
 
 ## License

@@ -18,13 +18,13 @@ type Config struct {
 	Logger   LoggerConfig
 	Admin    AdminConfig
 	Storage  StorageConfig
-	MinIO    MinIOConfig
+	S3       S3Config
 	Hash     HashConfig
 }
 
 // StorageConfig selects the storage backend and its settings.
 type StorageConfig struct {
-	// Type is "minio" or "local".
+	// Type is "s3" or "local".
 	Type string
 	// LocalPath is the base directory for local storage (only used when Type == "local").
 	LocalPath string
@@ -63,8 +63,8 @@ type AdminConfig struct {
 	Password string
 }
 
-// MinIOConfig holds MinIO configuration
-type MinIOConfig struct {
+// S3Config holds S3-compatible storage configuration
+type S3Config struct {
 	Endpoint        string
 	AccessKeyID     string
 	SecretAccessKey string
@@ -112,18 +112,18 @@ func Load() (*Config, error) {
 			Username: getEnv("ADMIN_USERNAME", ""),
 			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
-		Storage: StorageConfig{
-			Type:      getEnv("STORAGE_TYPE", "minio"),
+Storage: StorageConfig{
+			Type:      getEnv("STORAGE_TYPE", "local"),
 			LocalPath: getEnv("LOCAL_STORAGE_PATH", "./storage"),
 		},
-		MinIO: MinIOConfig{
-			Endpoint:        getEnv("MINIO_ENDPOINT", "minio:9000"),
-			AccessKeyID:     getEnv("MINIO_ACCESS_KEY", ""),
-			SecretAccessKey: getEnv("MINIO_SECRET_KEY", ""),
-			UseSSL:          getEnv("MINIO_USE_SSL", "false") == "true",
-			Region:          getEnv("MINIO_REGION", "us-east-1"),
-			Bucket:          getEnv("MINIO_BUCKET", "rh-pos"),
-			DefaultExpiry:   time.Hour * 1, // 1 hour default expiry
+		S3: S3Config{
+			Endpoint:        getEnv("S3_ENDPOINT", ""),
+			AccessKeyID:     getEnv("S3_ACCESS_KEY", ""),
+			SecretAccessKey: getEnv("S3_SECRET_KEY", ""),
+			UseSSL:          getEnv("S3_USE_SSL", "false") == "true",
+			Region:          getEnv("S3_REGION", "us-east-1"),
+Bucket:          getEnv("S3_BUCKET", "rh-pos"),
+			DefaultExpiry:   time.Hour * 1,
 		},
 		Hash: HashConfig{
 			Salt: getEnv("HASHID_SALT", ""),
@@ -143,10 +143,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("ADMIN_USERNAME and ADMIN_PASSWORD are required")
 	}
 
-	// Validate MinIO configuration (only required when STORAGE_TYPE=minio)
-	if config.Storage.Type == "minio" {
-		if config.MinIO.AccessKeyID == "" || config.MinIO.SecretAccessKey == "" {
-			return nil, fmt.Errorf("MINIO_ACCESS_KEY and MINIO_SECRET_KEY are required when STORAGE_TYPE=minio")
+	// Validate S3 configuration (only required when STORAGE_TYPE=s3)
+	if config.Storage.Type == "s3" {
+		if config.S3.AccessKeyID == "" || config.S3.SecretAccessKey == "" {
+			return nil, fmt.Errorf("S3_ACCESS_KEY and S3_SECRET_KEY are required when STORAGE_TYPE=s3")
 		}
 	}
 
