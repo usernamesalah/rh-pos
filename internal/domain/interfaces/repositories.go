@@ -20,7 +20,7 @@ type UserRepository interface {
 // ProductRepository defines the interface for product data operations
 type ProductRepository interface {
 	GetByID(ctx context.Context, id uint) (*entities.Product, error)
-	List(ctx context.Context, page, limit int) ([]entities.Product, int64, error)
+	List(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error)
 	Update(ctx context.Context, product *entities.Product) error
 	UpdateStock(ctx context.Context, id uint, stock int) error
 	Create(ctx context.Context, product *entities.Product) error

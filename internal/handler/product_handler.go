@@ -81,7 +81,9 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 		limit = 10
 	}
 
-	products, total, err := h.productService.ListProducts(ctx, page, limit)
+	search := c.QueryParam("search")
+
+	products, total, err := h.productService.ListProducts(ctx, page, limit, search)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to list products", "error", err)
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to list products")

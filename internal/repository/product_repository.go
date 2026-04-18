@@ -92,9 +92,9 @@ func (r *productRepository) GetByID(ctx context.Context, id uint) (*entities.Pro
 	return &product, nil
 }
 
-// List retrieves all products with pagination
-func (r *productRepository) List(ctx context.Context, page, limit int) ([]entities.Product, int64, error) {
-	r.logger.InfoContext(ctx, "listing products", "page", page, "limit", limit)
+// List retrieves all products with pagination and optional search
+func (r *productRepository) List(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error) {
+	r.logger.InfoContext(ctx, "listing products", "page", page, "limit", limit, "search", search)
 
 	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
 	if !ok {
@@ -105,6 +105,11 @@ func (r *productRepository) List(ctx context.Context, page, limit int) ([]entiti
 	var total int64
 
 	query := r.db.WithContext(ctx).Model(&entities.Product{}).Where("tenant_id = ?", tenantID)
+
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where("name LIKE ?", searchPattern)
+	}
 
 	if err := query.Count(&total).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to count products", "error", err)

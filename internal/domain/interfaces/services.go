@@ -23,7 +23,7 @@ type AuthService interface {
 // ProductService defines product business operations
 type ProductService interface {
 	GetProduct(ctx context.Context, id uint) (*entities.Product, error)
-	ListProducts(ctx context.Context, page, limit int) ([]entities.Product, int64, error)
+	ListProducts(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error)
 	UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error)
 	UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error)
 	CreateProduct(ctx context.Context, product *entities.Product) error
