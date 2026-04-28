@@ -17,7 +17,6 @@ type discountCampaignService struct {
 	logger       *slog.Logger
 }
 
-// NewDiscountCampaignService creates a new discount campaign service
 func NewDiscountCampaignService(campaignRepo interfaces.DiscountCampaignRepository, auditRepo interfaces.AuditLogRepository, logger *slog.Logger) interfaces.DiscountCampaignService {
 	return &discountCampaignService{
 		campaignRepo: campaignRepo,
@@ -26,11 +25,51 @@ func NewDiscountCampaignService(campaignRepo interfaces.DiscountCampaignReposito
 	}
 }
 
-// Create creates a new discount campaign
-func (s *discountCampaignService) Create(ctx context.Context, req interfaces.CreateCampaignRequest) (*entities.DiscountCampaign, error) {
-	if req.DiscountPercentage <= 0 || req.DiscountPercentage > 100 {
-		return nil, fmt.Errorf("discount_percentage must be between 0 and 100")
+func validateCampaignType(campaignType string, pct float64, buyQty *int, discAmt *float64, rewardPID *uint, rewardQty *int) error {
+	switch campaignType {
+	case entities.CampaignTypeProductPercentageDiscount:
+		if pct <= 0 || pct > 100 {
+			return fmt.Errorf("discount_percentage must be between 0 and 100 for %s", campaignType)
+		}
+	case entities.CampaignTypeBuyXQtyGetDiscountAmount:
+		if buyQty == nil || *buyQty < 2 {
+			return fmt.Errorf("buy_quantity must be >= 2 for %s", campaignType)
+		}
+		if discAmt == nil || *discAmt <= 0 {
+			return fmt.Errorf("discount_amount must be > 0 for %s", campaignType)
+		}
+	case entities.CampaignTypeBuyXQtyGetDiscountPercent:
+		if buyQty == nil || *buyQty < 2 {
+			return fmt.Errorf("buy_quantity must be >= 2 for %s", campaignType)
+		}
+		if pct <= 0 || pct > 100 {
+			return fmt.Errorf("discount_percentage must be between 0 and 100 for %s", campaignType)
+		}
+	case entities.CampaignTypeBuyXProductGetYProductFree:
+		if buyQty == nil || *buyQty < 1 {
+			return fmt.Errorf("buy_quantity must be >= 1 for %s", campaignType)
+		}
+		if rewardPID == nil {
+			return fmt.Errorf("reward_product_id is required for %s", campaignType)
+		}
+		if rewardQty == nil || *rewardQty < 1 {
+			return fmt.Errorf("reward_quantity must be >= 1 for %s", campaignType)
+		}
+	default:
+		return fmt.Errorf("unknown campaign_type: %s", campaignType)
 	}
+	return nil
+}
+
+func (s *discountCampaignService) Create(ctx context.Context, req interfaces.CreateCampaignRequest) (*entities.DiscountCampaign, error) {
+	if req.CampaignType == "" {
+		req.CampaignType = entities.CampaignTypeProductPercentageDiscount
+	}
+
+	if err := validateCampaignType(req.CampaignType, req.DiscountPercentage, req.BuyQuantity, req.DiscountAmount, req.RewardProductID, req.RewardQuantity); err != nil {
+		return nil, err
+	}
+
 	if !req.EndDate.After(req.StartDate) {
 		return nil, fmt.Errorf("end_date must be after start_date")
 	}
@@ -42,7 +81,12 @@ func (s *discountCampaignService) Create(ctx context.Context, req interfaces.Cre
 
 	campaign := &entities.DiscountCampaign{
 		Name:               req.Name,
+		CampaignType:       req.CampaignType,
 		DiscountPercentage: req.DiscountPercentage,
+		BuyQuantity:        req.BuyQuantity,
+		DiscountAmount:     req.DiscountAmount,
+		RewardProductID:    req.RewardProductID,
+		RewardQuantity:     req.RewardQuantity,
 		StartDate:          req.StartDate,
 		EndDate:            req.EndDate,
 		TenantID:           &tenantID,
@@ -61,12 +105,10 @@ func (s *discountCampaignService) Create(ctx context.Context, req interfaces.Cre
 	return s.campaignRepo.GetByID(ctx, campaign.ID)
 }
 
-// GetByID retrieves a campaign by ID
 func (s *discountCampaignService) GetByID(ctx context.Context, id uint) (*entities.DiscountCampaign, error) {
 	return s.campaignRepo.GetByID(ctx, id)
 }
 
-// List retrieves campaigns with pagination
 func (s *discountCampaignService) List(ctx context.Context, page, limit int) ([]entities.DiscountCampaign, int64, error) {
 	if page < 1 {
 		page = 1
@@ -77,7 +119,6 @@ func (s *discountCampaignService) List(ctx context.Context, page, limit int) ([]
 	return s.campaignRepo.List(ctx, page, limit)
 }
 
-// Update updates a campaign and writes an audit log entry.
 func (s *discountCampaignService) Update(ctx context.Context, id uint, req interfaces.UpdateCampaignRequest) (*entities.DiscountCampaign, error) {
 	campaign, err := s.campaignRepo.GetByID(ctx, id)
 	if err != nil {
@@ -92,17 +133,33 @@ func (s *discountCampaignService) Update(ctx context.Context, id uint, req inter
 	if req.Name != nil {
 		campaign.Name = *req.Name
 	}
+	if req.CampaignType != nil {
+		campaign.CampaignType = *req.CampaignType
+	}
 	if req.DiscountPercentage != nil {
-		if *req.DiscountPercentage <= 0 || *req.DiscountPercentage > 100 {
-			return nil, fmt.Errorf("discount_percentage must be between 0 and 100")
-		}
 		campaign.DiscountPercentage = *req.DiscountPercentage
+	}
+	if req.BuyQuantity != nil {
+		campaign.BuyQuantity = req.BuyQuantity
+	}
+	if req.DiscountAmount != nil {
+		campaign.DiscountAmount = req.DiscountAmount
+	}
+	if req.RewardProductID != nil {
+		campaign.RewardProductID = req.RewardProductID
+	}
+	if req.RewardQuantity != nil {
+		campaign.RewardQuantity = req.RewardQuantity
 	}
 	if req.StartDate != nil {
 		campaign.StartDate = *req.StartDate
 	}
 	if req.EndDate != nil {
 		campaign.EndDate = *req.EndDate
+	}
+
+	if err := validateCampaignType(campaign.CampaignType, campaign.DiscountPercentage, campaign.BuyQuantity, campaign.DiscountAmount, campaign.RewardProductID, campaign.RewardQuantity); err != nil {
+		return nil, err
 	}
 
 	if !campaign.EndDate.After(campaign.StartDate) {
@@ -128,7 +185,6 @@ func (s *discountCampaignService) Update(ctx context.Context, id uint, req inter
 	return updated, nil
 }
 
-// Delete deletes a campaign and writes an audit log entry.
 func (s *discountCampaignService) Delete(ctx context.Context, id uint) error {
 	campaign, err := s.campaignRepo.GetByID(ctx, id)
 	if err != nil {
@@ -149,7 +205,6 @@ func (s *discountCampaignService) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-// AddProducts adds products to a campaign
 func (s *discountCampaignService) AddProducts(ctx context.Context, campaignID uint, productIDs []uint) error {
 	if _, err := s.campaignRepo.GetByID(ctx, campaignID); err != nil {
 		return err
@@ -157,7 +212,6 @@ func (s *discountCampaignService) AddProducts(ctx context.Context, campaignID ui
 	return s.campaignRepo.AddProducts(ctx, campaignID, productIDs)
 }
 
-// RemoveProduct removes a product from a campaign
 func (s *discountCampaignService) RemoveProduct(ctx context.Context, campaignID uint, productID uint) error {
 	if _, err := s.campaignRepo.GetByID(ctx, campaignID); err != nil {
 		return err
@@ -165,7 +219,6 @@ func (s *discountCampaignService) RemoveProduct(ctx context.Context, campaignID 
 	return s.campaignRepo.RemoveProduct(ctx, campaignID, productID)
 }
 
-// writeAuditLog writes an audit log entry. Errors are logged but do not fail the main operation.
 func (s *discountCampaignService) writeAuditLog(ctx context.Context, entityID uint, action string, before, after json.RawMessage) {
 	tenantID, _ := ctxkey.TenantIDFromContext(ctx)
 	userID, _ := ctxkey.UserIDFromContext(ctx)

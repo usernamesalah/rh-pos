@@ -109,21 +109,11 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 func (s *productService) UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error) {
 	s.logger.InfoContext(ctx, "updating product stock", "id", id, "stock", stock)
 
-	// Get existing product
-	product, err := s.productRepo.GetByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get product: %w", err)
-	}
-
-	// Update stock
-	product.Stock = stock
-
-	// Save changes
-	if err := s.productRepo.Update(ctx, product); err != nil {
+	if err := s.productRepo.UpdateStock(ctx, id, stock); err != nil {
 		return nil, fmt.Errorf("failed to update product stock: %w", err)
 	}
 
-	return product, nil
+	return s.productRepo.GetByID(ctx, id)
 }
 
 // CreateProduct creates a new product

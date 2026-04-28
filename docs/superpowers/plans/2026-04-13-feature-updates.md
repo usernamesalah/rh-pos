@@ -1,817 +1,308 @@
-# Feature Updates Implementation Plan
+# Feature Updates Completion Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement five incremental product/tenant/RBAC updates: SKU nullable, tenant terms-of-service, cashier discount update permission, product delete endpoint, and nullable price fields with copy-on-null logic.
+**Goal:** Bring the backend fully in line with `docs/superpowers/specs/2026-04-13-feature-updates-design.md`, based on the repo's current state rather than re-implementing already completed work.
 
-**Architecture:** Clean Architecture layers touched in order — entity → migration → repository (if needed) → usecase → handler → router. Each task is self-contained and the build must pass after every commit.
+**Planning note:** Most of the spec is already implemented in the current branch. This plan focuses on verification, the remaining Feature 5 gap in `UpdateProduct`, and API behavior/documentation alignment.
 
-**Tech Stack:** Go 1.25, Echo v4, GORM v2, MySQL, Goose migrations, standard `testing` package for unit tests.
+---
+
+## Current Status Audit
+
+| Spec requirement | Status | Evidence |
+|---|---|---|
+| SKU nullable | Implemented | `internal/domain/entities/product.go`, `migrations/015_sku_nullable.sql`, `internal/handler/product_handler.go` |
+| Tenant `terms_of_service` field | Implemented | `internal/domain/entities/tenant.go`, `migrations/016_add_tenant_terms_of_service.sql`, `internal/handler/admin.go`, `internal/handler/auth_handler.go` |
+| Cashier can update discount campaigns | Implemented | `internal/server/router.go` |
+| Admin-only product delete endpoint | Implemented | `internal/domain/interfaces/services.go`, `internal/usecase/product_service.go`, `internal/handler/product_handler.go`, `internal/server/router.go` |
+| Nullable prices on create | Implemented | `internal/domain/entities/product.go`, `migrations/017_price_fields_nullable.sql`, `internal/usecase/product_service.go` |
+| Copy-on-null for `CreateProduct` | Implemented | `internal/usecase/product_service.go`, `internal/usecase/product_service_test.go` |
+| Copy-on-null for `UpdateProduct` | Not implemented | `internal/usecase/product_service.go` currently updates fields independently |
+| Validation error status for invalid price input | Not aligned | `internal/handler/product_handler.go` currently returns `500` from `CreateProduct`/`UpdateProduct` service validation failures |
+| Frontend/API doc reflects actual final behavior | Not aligned | `docs/2026-04-13-frontend-api-changes.md` still says both missing prices returns `500` |
 
 ---
 
 ## File Map
 
 | File | Change |
-|------|--------|
-| `migrations/015_sku_nullable.sql` | CREATE — make `products.sku` nullable |
-| `migrations/016_add_tenant_terms_of_service.sql` | CREATE — add `tenants.terms_of_service` |
-| `migrations/017_price_fields_nullable.sql` | CREATE — make `harga_modal`/`harga_jual` nullable |
-| `internal/domain/entities/product.go` | MODIFY — `SKU *string`, `HargaModal/HargaJual *float64` |
-| `internal/domain/entities/tenant.go` | MODIFY — add `TermsOfService string` |
-| `internal/domain/interfaces/services.go` | MODIFY — add `DeleteProduct` to `ProductService` |
-| `internal/usecase/product_service.go` | MODIFY — SKU nil guard, copy-on-null prices, `DeleteProduct` |
-| `internal/usecase/product_service_test.go` | CREATE — unit tests for new business logic |
-| `internal/handler/product_handler.go` | MODIFY — update request structs, add `DeleteProduct` handler |
-| `internal/server/router.go` | MODIFY — remove AdminOnly from campaign PUT, add product DELETE |
+|---|---|
+| `internal/domain/apperrors/errors.go` | MODIFY - add one sentinel error for invalid product price input |
+| `internal/usecase/product_service.go` | MODIFY - apply Feature 5 rules to `UpdateProduct` and return wrapped validation error |
+| `internal/usecase/product_service_test.go` | MODIFY - add tests for update-time copy-on-null and both-nil validation |
+| `internal/handler/product_handler.go` | MODIFY - map product validation failures to `400 Bad Request` |
+| `docs/2026-04-13-frontend-api-changes.md` | MODIFY - document final status code and update semantics |
+| `docs/superpowers/plans/2026-04-13-feature-updates.md` | MODIFY - this plan |
 
 ---
 
-## Task 1: Write the three migrations
+## Task 1: Verify The Already-Implemented Spec Items
+
+**Goal:** Confirm the repo baseline before changing the remaining gaps.
 
 **Files:**
-- Create: `migrations/015_sku_nullable.sql`
-- Create: `migrations/016_add_tenant_terms_of_service.sql`
-- Create: `migrations/017_price_fields_nullable.sql`
+- No code changes expected
 
-- [ ] **Step 1: Create migration 015**
+- [ ] Run the focused usecase tests:
 
-```sql
--- migrations/015_sku_nullable.sql
--- +goose Up
--- +goose StatementBegin
-ALTER TABLE `products` MODIFY COLUMN `sku` VARCHAR(191) NULL;
--- +goose StatementEnd
-
--- +goose Down
--- +goose StatementBegin
-ALTER TABLE `products` MODIFY COLUMN `sku` VARCHAR(191) NOT NULL DEFAULT '';
--- +goose StatementEnd
+```bash
+go test ./internal/usecase/... -v
 ```
 
-- [ ] **Step 2: Create migration 016**
+Expected: existing product tests pass, including SKU-null, delete, and create-time copy-on-null cases.
 
-```sql
--- migrations/016_add_tenant_terms_of_service.sql
--- +goose Up
--- +goose StatementBegin
-ALTER TABLE `tenants` ADD COLUMN `terms_of_service` TEXT NULL;
--- +goose StatementEnd
-
--- +goose Down
--- +goose StatementBegin
-ALTER TABLE `tenants` DROP COLUMN `terms_of_service`;
--- +goose StatementEnd
-```
-
-- [ ] **Step 3: Create migration 017**
-
-```sql
--- migrations/017_price_fields_nullable.sql
--- +goose Up
--- +goose StatementBegin
-ALTER TABLE `products`
-  MODIFY COLUMN `harga_modal` DECIMAL(15,2) NULL,
-  MODIFY COLUMN `harga_jual`  DECIMAL(15,2) NULL;
--- +goose StatementEnd
-
--- +goose Down
--- +goose StatementBegin
-ALTER TABLE `products`
-  MODIFY COLUMN `harga_modal` DECIMAL(15,2) NOT NULL DEFAULT 0,
-  MODIFY COLUMN `harga_jual`  DECIMAL(15,2) NOT NULL DEFAULT 0;
--- +goose StatementEnd
-```
-
-- [ ] **Step 4: Verify build still passes**
+- [ ] Run a full build:
 
 ```bash
 go build ./...
 ```
 
-Expected: no output (clean build).
+Expected: clean build.
 
-- [ ] **Step 5: Commit**
+- [ ] Confirm the current spec coverage manually in code:
 
-```bash
-git add migrations/015_sku_nullable.sql migrations/016_add_tenant_terms_of_service.sql migrations/017_price_fields_nullable.sql
-git commit -m "feat: add migrations 015-017 for nullable SKU, tenant ToS, and nullable prices"
+```text
+internal/domain/entities/product.go
+internal/domain/entities/tenant.go
+internal/handler/admin.go
+internal/handler/auth_handler.go
+internal/handler/product_handler.go
+internal/server/router.go
+migrations/015_sku_nullable.sql
+migrations/016_add_tenant_terms_of_service.sql
+migrations/017_price_fields_nullable.sql
 ```
+
+Completion criteria: only Feature 5 update semantics and validation-response handling remain open.
 
 ---
 
-## Task 2: Tenant Terms of Service — entity + handler
+## Task 2: Finish Feature 5 For `UpdateProduct`
+
+**Goal:** Apply the same nullable-price rules from the spec to product updates, not just creates.
 
 **Files:**
-- Modify: `internal/domain/entities/tenant.go`
-
-- [ ] **Step 1: Add `TermsOfService` to Tenant entity**
-
-In `internal/domain/entities/tenant.go`, add one field after `Logo`:
-
-```go
-// Tenant represents a tenant in the system
-type Tenant struct {
-	ID              uint      `json:"id"`
-	Name            string    `json:"name"`
-	About           string    `json:"about"`
-	Address         string    `json:"address"`
-	PhoneNumber     string    `json:"phone_number"`
-	Logo            string    `json:"logo"`
-	TermsOfService  string    `json:"terms_of_service"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-}
-```
-
-No handler change is needed: `admin.go` already binds `c.Bind(&tenant)` directly to `entities.Tenant`, so the new field is automatically included in create, update, and get responses.
-
-- [ ] **Step 2: Verify build passes**
-
-```bash
-go build ./...
-```
-
-Expected: no output.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add internal/domain/entities/tenant.go
-git commit -m "feat: add terms_of_service field to Tenant entity"
-```
-
----
-
-## Task 3: Cashier can update discount campaigns — router change
-
-**Files:**
-- Modify: `internal/server/router.go`
-
-- [ ] **Step 1: Remove AdminOnly from campaign PUT route**
-
-In `internal/server/router.go`, find the campaign routes block (around line 165) and change:
-
-```go
-campaigns.PUT("/:id", campaignHandler.UpdateCampaign, adminMiddleware.AdminOnly)
-```
-
-to:
-
-```go
-campaigns.PUT("/:id", campaignHandler.UpdateCampaign)
-```
-
-All other campaign routes remain unchanged (POST, DELETE, POST products, DELETE products all keep `adminMiddleware.AdminOnly`).
-
-- [ ] **Step 2: Verify build passes**
-
-```bash
-go build ./...
-```
-
-Expected: no output.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add internal/server/router.go
-git commit -m "feat: allow cashier role to update discount campaigns"
-```
-
----
-
-## Task 4: SKU nullable — entity, usecase, handler
-
-**Files:**
-- Modify: `internal/domain/entities/product.go`
+- Modify: `internal/domain/apperrors/errors.go`
 - Modify: `internal/usecase/product_service.go`
-- Modify: `internal/handler/product_handler.go`
+- Modify: `internal/usecase/product_service_test.go`
 
-- [ ] **Step 1: Write failing test for SKU nil in CreateProduct**
+- [ ] Add one sentinel error for invalid product price input in `internal/domain/apperrors/errors.go`.
 
-Create `internal/usecase/product_service_test.go`:
+Recommended shape:
 
 ```go
-package usecase_test
-
-import (
-	"context"
-	"errors"
-	"testing"
-
-	"github.com/usernamesalah/rh-pos/internal/domain/entities"
-	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
-	"github.com/usernamesalah/rh-pos/internal/pkg/ctxkey"
-	"github.com/usernamesalah/rh-pos/internal/usecase"
-	"log/slog"
-	"os"
+var (
+    ErrUserNotFound       = errors.New("user not found")
+    ErrInvalidPassword    = errors.New("invalid current password")
+    ErrTenantNotInContext = errors.New("tenant_id not found in context")
+    ErrInvalidProductPrice = errors.New("invalid product price input")
 )
-
-// --- minimal mock repository ---
-
-type mockProductRepo struct {
-	products map[uint]*entities.Product
-	nextID   uint
-	bySKU    map[string]*entities.Product
-}
-
-func newMockRepo() *mockProductRepo {
-	return &mockProductRepo{
-		products: make(map[uint]*entities.Product),
-		bySKU:    make(map[string]*entities.Product),
-	}
-}
-
-func (m *mockProductRepo) Create(ctx context.Context, p *entities.Product) error {
-	m.nextID++
-	p.ID = m.nextID
-	m.products[p.ID] = p
-	if p.SKU != nil {
-		m.bySKU[*p.SKU] = p
-	}
-	return nil
-}
-
-func (m *mockProductRepo) GetByID(ctx context.Context, id uint) (*entities.Product, error) {
-	p, ok := m.products[id]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return p, nil
-}
-
-func (m *mockProductRepo) GetBySKU(ctx context.Context, sku string) (*entities.Product, error) {
-	p, ok := m.bySKU[sku]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return p, nil
-}
-
-func (m *mockProductRepo) List(ctx context.Context, page, limit int) ([]entities.Product, int64, error) {
-	return nil, 0, nil
-}
-
-func (m *mockProductRepo) Update(ctx context.Context, p *entities.Product) error {
-	m.products[p.ID] = p
-	return nil
-}
-
-func (m *mockProductRepo) UpdateStock(ctx context.Context, id uint, stock int) error {
-	return nil
-}
-
-func (m *mockProductRepo) Delete(ctx context.Context, id uint) error {
-	delete(m.products, id)
-	return nil
-}
-
-var _ interfaces.ProductRepository = (*mockProductRepo)(nil)
-
-func ctxWithTenant(tenantID uint) context.Context {
-	return ctxkey.WithTenantID(context.Background(), tenantID)
-}
-
-func newLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-}
-
-// --- tests ---
-
-func TestCreateProduct_NilSKU_DoesNotCheckDuplicate(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	p := &entities.Product{Name: "Test", SKU: nil}
-	if err := svc.CreateProduct(ctx, p); err != nil {
-		t.Fatalf("expected nil error for nil SKU product, got: %v", err)
-	}
-}
-
-func TestCreateProduct_DuplicateSKU_ReturnsError(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	sku := "SKU-001"
-	p1 := &entities.Product{Name: "First", SKU: &sku}
-	if err := svc.CreateProduct(ctx, p1); err != nil {
-		t.Fatalf("first create failed: %v", err)
-	}
-
-	p2 := &entities.Product{Name: "Second", SKU: &sku}
-	if err := svc.CreateProduct(ctx, p2); err == nil {
-		t.Fatal("expected duplicate SKU error, got nil")
-	}
-}
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+Use one error only. Do not introduce a custom error type unless needed.
+
+- [ ] In `internal/usecase/product_service.go`, update `UpdateProduct` so price normalization happens after the existing product is loaded and after request fields are applied.
+
+Required behavior from the spec:
+
+```text
+If only harga_jual is provided in the update, set harga_modal to the same value.
+If only harga_modal is provided in the update, set harga_jual to the same value.
+If both are provided, use both values as-is.
+If the resulting product still has both prices nil, return a validation error.
+```
+
+Implementation guidance:
+
+```text
+1. Load the existing product.
+2. Track whether `harga_modal` and `harga_jual` were present in the update map.
+3. Apply the requested field updates.
+4. Normalize prices based on which price fields were provided.
+5. If both resulting fields are nil, return `fmt.Errorf("...: %w", apperrors.ErrInvalidProductPrice)`.
+6. Save through `productRepo.Update`.
+```
+
+Important nuance:
+
+```text
+Omitted price fields should not be treated as an instruction to clear them.
+Only fields present in the `updates` map count as client-provided update inputs.
+```
+
+- [ ] Add or extend tests in `internal/usecase/product_service_test.go`.
+
+Minimum required test cases:
+
+```text
+TestUpdateProduct_OnlyHargaJual_CopiesHargaModal
+TestUpdateProduct_OnlyHargaModal_CopiesHargaJual
+TestUpdateProduct_BothPricesSet_UsesAsIs
+TestUpdateProduct_BothPricesNil_ReturnsError
+```
+
+Recommended test setup pattern:
+
+```text
+1. Seed an existing product in the mock repo.
+2. Call `UpdateProduct` with a partial updates map.
+3. Assert the returned product and stored product have the normalized values.
+4. Assert the both-nil case returns `apperrors.ErrInvalidProductPrice` via `errors.Is`.
+```
+
+- [ ] Run the focused tests:
 
 ```bash
-go test ./internal/usecase/... -run TestCreateProduct -v 2>&1 | head -30
+go test ./internal/usecase/... -run TestUpdateProduct -v
 ```
 
-Expected: compilation error because `Product.SKU` is still `string`, not `*string`.
+Expected: all new update-price tests pass.
 
-- [ ] **Step 3: Update Product entity**
+---
 
-In `internal/domain/entities/product.go`, change:
+## Task 3: Return `400` For Product Validation Errors
 
-```go
-SKU        string    `json:"sku" gorm:"uniqueIndex:idx_tenant_sku;not null"`
+**Goal:** Product input validation failures should not surface as internal server errors.
+
+**Files:**
+- Modify: `internal/handler/product_handler.go`
+
+- [ ] Update `CreateProduct` in `internal/handler/product_handler.go` to map `apperrors.ErrInvalidProductPrice` to `400 Bad Request`.
+
+Recommended behavior:
+
+```text
+If `CreateProduct` returns `ErrInvalidProductPrice`, respond with 400 and the spec message.
+Keep unexpected service failures as 500.
 ```
 
-to:
+- [ ] Update `UpdateProduct` in `internal/handler/product_handler.go` to map `apperrors.ErrInvalidProductPrice` to `400 Bad Request`.
 
-```go
-SKU        *string   `json:"sku" gorm:"uniqueIndex:idx_tenant_sku"`
+Recommended response message:
+
+```text
+at least one of harga_jual or harga_modal must be provided
 ```
 
-- [ ] **Step 4: Fix product_handler.go request struct**
+If the codebase convention prefers generic client-facing text, keep the handler message generic but still return `400`.
 
-In `internal/handler/product_handler.go`, change `CreateProductRequest`:
-
-```go
-type CreateProductRequest struct {
-	Name       string   `json:"name" validate:"required"`
-	SKU        *string  `json:"sku,omitempty"`
-	Image      string   `json:"image,omitempty"`
-	HargaModal *float64 `json:"harga_modal,omitempty"`
-	HargaJual  *float64 `json:"harga_jual,omitempty"`
-	Stock      int      `json:"stock" validate:"min=0"`
-}
-```
-
-Then in `CreateProduct` handler, update the product assignment:
-
-```go
-product := &entities.Product{
-    Name:       req.Name,
-    SKU:        req.SKU,
-    Image:      req.Image,
-    HargaModal: req.HargaModal,
-    HargaJual:  req.HargaJual,
-    Stock:      req.Stock,
-}
-```
-
-- [ ] **Step 5: Fix product_service.go for nil SKU**
-
-In `internal/usecase/product_service.go`, replace the `CreateProduct` method with:
-
-```go
-// CreateProduct creates a new product
-func (s *productService) CreateProduct(ctx context.Context, product *entities.Product) error {
-	var skuStr string
-	if product.SKU != nil {
-		skuStr = *product.SKU
-	}
-	s.logger.InfoContext(ctx, "creating product", "sku", skuStr)
-
-	// Get tenant_id from context
-	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
-	if !ok {
-		return fmt.Errorf("tenant_id not found in context")
-	}
-
-	// Set tenant_id
-	product.TenantID = &tenantID
-
-	// Check for duplicate SKU only when SKU is provided
-	if product.SKU != nil {
-		existingProduct, err := s.productRepo.GetBySKU(ctx, *product.SKU)
-		if err == nil && existingProduct != nil {
-			return fmt.Errorf("product with SKU %s already exists", *product.SKU)
-		}
-	}
-
-	// Create product
-	if err := s.productRepo.Create(ctx, product); err != nil {
-		return fmt.Errorf("failed to create product: %w", err)
-	}
-
-	return nil
-}
-```
-
-Also fix the `UpdateProduct` switch in the same file — `sku` case needs to handle `*string` entity field:
-
-```go
-case "sku":
-    if v, ok := value.(string); ok {
-        product.SKU = &v
-    }
-case "harga_modal":
-    product.HargaModal = value.(float64)
-case "harga_jual":
-    product.HargaJual = value.(float64)
-```
-
-Wait — `HargaModal` and `HargaJual` are still `float64` at this point in the plan (they become `*float64` in Task 6). Leave the `harga_modal`/`harga_jual` cases as `float64` for now; Task 6 will update them.
-
-- [ ] **Step 6: Run the tests**
-
-```bash
-go test ./internal/usecase/... -run TestCreateProduct -v
-```
-
-Expected output:
-```
---- PASS: TestCreateProduct_NilSKU_DoesNotCheckDuplicate (0.00s)
---- PASS: TestCreateProduct_DuplicateSKU_ReturnsError (0.00s)
-PASS
-```
-
-- [ ] **Step 7: Verify full build**
+- [ ] Run the build after the handler change:
 
 ```bash
 go build ./...
 ```
 
-Expected: no output.
+Expected: clean build.
 
-- [ ] **Step 8: Commit**
+Optional if convenient:
 
-```bash
-git add internal/domain/entities/product.go \
-        internal/usecase/product_service.go \
-        internal/usecase/product_service_test.go \
-        internal/handler/product_handler.go
-git commit -m "feat: make product SKU optional (nullable)"
+```text
+Add a small handler test for create/update validation mapping.
+If no handler test harness exists, rely on usecase tests plus a manual API smoke check.
 ```
 
 ---
 
-## Task 5: Product delete — service interface, usecase, handler, router
+## Task 4: Align Frontend/API Documentation
+
+**Goal:** Make the consumer-facing doc match the final backend behavior.
 
 **Files:**
-- Modify: `internal/domain/interfaces/services.go`
-- Modify: `internal/usecase/product_service.go`
-- Modify: `internal/handler/product_handler.go`
-- Modify: `internal/server/router.go`
+- Modify: `docs/2026-04-13-frontend-api-changes.md`
 
-Note: `ProductRepository.Delete` already exists in `internal/domain/interfaces/repositories.go` and is implemented in `internal/repository/product_repository.go`. Only the service layer and above need changes.
+- [ ] Update the price-field section so it no longer says both missing prices returns `500`.
 
-- [ ] **Step 1: Write failing test for DeleteProduct**
+Change the text to `400` and clarify update semantics:
 
-Add to `internal/usecase/product_service_test.go`:
-
-```go
-func TestDeleteProduct_ExistingProduct_Succeeds(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	// Create a product first
-	p := &entities.Product{Name: "ToDelete"}
-	if err := svc.CreateProduct(ctx, p); err != nil {
-		t.Fatalf("create failed: %v", err)
-	}
-
-	if err := svc.DeleteProduct(ctx, p.ID); err != nil {
-		t.Fatalf("expected nil error, got: %v", err)
-	}
-}
+```text
+- On create, at least one of `harga_jual` or `harga_modal` must be provided.
+- On update, if only one of the two price fields is supplied, the other is synchronized to the same value.
+- Requests that would leave both prices unset return `400 Bad Request`.
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] Review the rest of the document for consistency with the implemented routes and nullable fields.
 
-```bash
-go test ./internal/usecase/... -run TestDeleteProduct -v 2>&1 | head -10
-```
+Specific checks:
 
-Expected: compilation error — `DeleteProduct` does not exist on service.
-
-- [ ] **Step 3: Add DeleteProduct to ProductService interface**
-
-In `internal/domain/interfaces/services.go`, add one line to the `ProductService` interface:
-
-```go
-type ProductService interface {
-    GetProduct(ctx context.Context, id uint) (*entities.Product, error)
-    ListProducts(ctx context.Context, page, limit int) ([]entities.Product, int64, error)
-    UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error)
-    UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error)
-    CreateProduct(ctx context.Context, product *entities.Product) error
-    DeleteProduct(ctx context.Context, id uint) error
-    GetProductImageURL(ctx context.Context, product *entities.Product) (string, error)
-    GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (uploadURL string, imageKey string, err error)
-    UploadProductImage(ctx context.Context, productID uint, fileData []byte, contentType string) (*entities.Product, error)
-    GetProductImageBytes(ctx context.Context, productID uint) ([]byte, string, error)
-}
-```
-
-- [ ] **Step 4: Implement DeleteProduct in productService usecase**
-
-Add at the end of `internal/usecase/product_service.go`:
-
-```go
-// DeleteProduct deletes a product by ID
-func (s *productService) DeleteProduct(ctx context.Context, id uint) error {
-	s.logger.InfoContext(ctx, "deleting product", "id", id)
-
-	if err := s.productRepo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete product: %w", err)
-	}
-
-	return nil
-}
-```
-
-Also add `Delete` to the mock repository in the test file (it's already there from Task 4 Step 1 — no additional change needed).
-
-- [ ] **Step 5: Run the test**
-
-```bash
-go test ./internal/usecase/... -run TestDeleteProduct -v
-```
-
-Expected:
-```
---- PASS: TestDeleteProduct_ExistingProduct_Succeeds (0.00s)
-PASS
-```
-
-- [ ] **Step 6: Add DeleteProduct handler**
-
-Add to the end of `internal/handler/product_handler.go`:
-
-```go
-// DeleteProduct handles deleting a product
-// @Summary Delete a product
-// @Description Delete a product by its hashed ID (admin only)
-// @Tags Products
-// @Produce json
-// @Security bearerAuth
-// @Param id path string true "Hashed product ID"
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/products/{id} [delete]
-func (h *ProductHandler) DeleteProduct(c echo.Context) error {
-	ctx := c.Request().Context()
-
-	id, err := hash.DecodeHashID(c.Param("id"))
-	if err != nil {
-		return ErrorResponse(c, http.StatusBadRequest, "Invalid product ID format")
-	}
-
-	if err := h.productService.DeleteProduct(ctx, id); err != nil {
-		h.logger.ErrorContext(ctx, "failed to delete product", "error", err, "id", id)
-		return ErrorResponse(c, http.StatusInternalServerError, "Failed to delete product")
-	}
-
-	return SuccessResponse(c, http.StatusOK, "Product deleted successfully", nil)
-}
-```
-
-- [ ] **Step 7: Register the route in the router**
-
-In `internal/server/router.go`, add after the existing product routes (around line 148):
-
-```go
-products.DELETE("/:id", productHandler.DeleteProduct, adminMiddleware.AdminOnly)
-```
-
-The full products block should now look like:
-
-```go
-products := api.Group("/products")
-products.GET("", productHandler.ListProducts)
-products.GET("/:id", productHandler.GetProduct)
-products.GET("/:id/image/bytes", productHandler.GetProductImageBytes)
-products.POST("", productHandler.CreateProduct, adminMiddleware.AdminOnly)
-products.PUT("/:id", productHandler.UpdateProduct, adminMiddleware.AdminOnly)
-products.PUT("/:id/stock", productHandler.UpdateStock, adminMiddleware.AdminOnly)
-products.DELETE("/:id", productHandler.DeleteProduct, adminMiddleware.AdminOnly)
-products.POST("/:id/upload-url", productHandler.GetUploadURL, adminMiddleware.AdminOnly)
-products.POST("/:id/image", productHandler.UploadProductImage, adminMiddleware.AdminOnly)
-```
-
-- [ ] **Step 8: Verify build passes**
-
-```bash
-go build ./...
-go test ./internal/usecase/... -v
-```
-
-Expected: build clean, all tests pass.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add internal/domain/interfaces/services.go \
-        internal/usecase/product_service.go \
-        internal/usecase/product_service_test.go \
-        internal/handler/product_handler.go \
-        internal/server/router.go
-git commit -m "feat: add admin-only DELETE /api/products/:id endpoint"
+```text
+- `sku` optional in create/update
+- `terms_of_service` present in tenant APIs
+- cashier can `PUT /api/discount-campaigns/:id`
+- admin-only `DELETE /api/products/:id`
 ```
 
 ---
 
-## Task 6: Nullable price fields with copy-on-null logic
+## Task 5: Final Verification
+
+**Goal:** Verify the remaining spec work is complete end-to-end.
 
 **Files:**
-- Modify: `internal/domain/entities/product.go`
-- Modify: `internal/usecase/product_service.go`
-- Modify: `internal/handler/product_handler.go`
+- No code changes expected
 
-- [ ] **Step 1: Write failing tests for copy-on-null**
-
-Add to `internal/usecase/product_service_test.go`:
-
-```go
-func ptr64(v float64) *float64 { return &v }
-
-func TestCreateProduct_OnlyHargaJual_CopiesHargaModal(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	p := &entities.Product{Name: "Test", HargaJual: ptr64(2000)}
-	if err := svc.CreateProduct(ctx, p); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if p.HargaModal == nil {
-		t.Fatal("expected HargaModal to be set, got nil")
-	}
-	if *p.HargaModal != 2000 {
-		t.Errorf("expected HargaModal=2000, got %v", *p.HargaModal)
-	}
-}
-
-func TestCreateProduct_OnlyHargaModal_CopiesHargaJual(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	p := &entities.Product{Name: "Test", HargaModal: ptr64(1500)}
-	if err := svc.CreateProduct(ctx, p); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if p.HargaJual == nil {
-		t.Fatal("expected HargaJual to be set, got nil")
-	}
-	if *p.HargaJual != 1500 {
-		t.Errorf("expected HargaJual=1500, got %v", *p.HargaJual)
-	}
-}
-
-func TestCreateProduct_BothPricesNil_ReturnsError(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	p := &entities.Product{Name: "Test"}
-	err := svc.CreateProduct(ctx, p)
-	if err == nil {
-		t.Fatal("expected validation error for both nil prices, got nil")
-	}
-}
-
-func TestCreateProduct_BothPricesSet_UsesAsIs(t *testing.T) {
-	repo := newMockRepo()
-	svc := usecase.NewProductService(repo, nil, "", newLogger())
-	ctx := ctxWithTenant(1)
-
-	p := &entities.Product{Name: "Test", HargaJual: ptr64(3000), HargaModal: ptr64(2000)}
-	if err := svc.CreateProduct(ctx, p); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if *p.HargaJual != 3000 || *p.HargaModal != 2000 {
-		t.Errorf("expected prices unchanged, got jual=%v modal=%v", *p.HargaJual, *p.HargaModal)
-	}
-}
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-```bash
-go test ./internal/usecase/... -run TestCreateProduct_Only -v 2>&1 | head -20
-```
-
-Expected: compilation errors — `HargaModal` and `HargaJual` are still `float64`, not `*float64`.
-
-- [ ] **Step 3: Update Product entity**
-
-In `internal/domain/entities/product.go`, change:
-
-```go
-HargaModal float64   `json:"harga_modal" gorm:"not null"`
-HargaJual  float64   `json:"harga_jual" gorm:"not null"`
-```
-
-to:
-
-```go
-HargaModal *float64  `json:"harga_modal"`
-HargaJual  *float64  `json:"harga_jual"`
-```
-
-- [ ] **Step 4: Fix UpdateProduct switch in usecase**
-
-In `internal/usecase/product_service.go`, update the `harga_modal` and `harga_jual` cases in the `UpdateProduct` switch:
-
-```go
-case "harga_modal":
-    if v, ok := value.(float64); ok {
-        product.HargaModal = &v
-    }
-case "harga_jual":
-    if v, ok := value.(float64); ok {
-        product.HargaJual = &v
-    }
-```
-
-- [ ] **Step 5: Add copy-on-null logic to CreateProduct in usecase**
-
-In `internal/usecase/product_service.go`, add price normalization inside `CreateProduct`, before the `productRepo.Create` call:
-
-```go
-// Normalize prices: if one is nil, copy the other; both nil is invalid
-switch {
-case product.HargaJual != nil && product.HargaModal == nil:
-    v := *product.HargaJual
-    product.HargaModal = &v
-case product.HargaModal != nil && product.HargaJual == nil:
-    v := *product.HargaModal
-    product.HargaJual = &v
-case product.HargaJual == nil && product.HargaModal == nil:
-    return fmt.Errorf("at least one of harga_jual or harga_modal must be provided")
-}
-```
-
-- [ ] **Step 6: Fix handler compilation errors from *float64 entity fields**
-
-The `ListProducts`, `GetProduct`, `UpdateProduct`, `UpdateStock`, `UploadProductImage` handlers all have response maps like:
-```go
-"harga_modal": product.HargaModal,
-"harga_jual":  product.HargaJual,
-```
-
-With `*float64` fields, these will now serialize as `null` when nil and as the number when set — that is correct JSON behavior. No handler changes needed for the response maps; Go's JSON marshaller handles `*float64` correctly.
-
-However, the `UpdateProductRequest` already uses `*float64` — no change there.
-
-The `CreateProductRequest` was already updated in Task 4 Step 4 to use `*float64`. No further change needed.
-
-- [ ] **Step 7: Run all tests**
+- [ ] Run targeted tests:
 
 ```bash
 go test ./internal/usecase/... -v
 ```
 
-Expected output (all pass):
-```
---- PASS: TestCreateProduct_NilSKU_DoesNotCheckDuplicate
---- PASS: TestCreateProduct_DuplicateSKU_ReturnsError
---- PASS: TestDeleteProduct_ExistingProduct_Succeeds
---- PASS: TestCreateProduct_OnlyHargaJual_CopiesHargaModal
---- PASS: TestCreateProduct_OnlyHargaModal_CopiesHargaJual
---- PASS: TestCreateProduct_BothPricesNil_ReturnsError
---- PASS: TestCreateProduct_BothPricesSet_UsesAsIs
-PASS
-```
-
-- [ ] **Step 8: Verify full build**
+- [ ] Run the full test suite:
 
 ```bash
-go build ./...
-go test ./... 2>&1
+go test ./...
 ```
 
-Expected: clean build, all tests pass.
-
-- [ ] **Step 9: Commit**
+- [ ] Run a full build:
 
 ```bash
-git add internal/domain/entities/product.go \
-        internal/usecase/product_service.go \
-        internal/usecase/product_service_test.go \
-        internal/handler/product_handler.go
-git commit -m "feat: make harga_jual and harga_modal optional with copy-on-null logic"
+go build -o bin/rh-pos cmd/main.go
+```
+
+- [ ] If local environment is ready, perform one manual API smoke check for each changed behavior:
+
+```text
+POST /api/products with only harga_jual -> success, harga_modal copied
+PUT /api/products/:id with only harga_modal -> success, harga_jual copied
+POST /api/products with both prices omitted -> 400
+PUT /api/products/:id on a both-nil payload/result -> 400
+DELETE /api/products/:id as admin -> success
+PUT /api/discount-campaigns/:id as cashier -> success
+GET /api/my-tenant -> includes terms_of_service
+```
+
+Completion criteria:
+
+```text
+All five spec features are implemented.
+Feature 5 behaves the same on create and update.
+Client-visible validation errors return 400 instead of 500.
+Docs match the shipped behavior.
 ```
 
 ---
 
 ## Spec Coverage Check
 
-| Spec requirement | Task |
-|-----------------|------|
-| SKU nullable, no duplicate check when nil | Task 4 |
-| Migration 015 | Task 1 |
-| Tenant terms_of_service field | Task 2 |
-| Migration 016 | Task 1 |
-| Cashier can PUT discount campaign | Task 3 |
-| Product delete endpoint (admin-only) | Task 5 |
-| Migration 017 | Task 1 |
-| harga_jual/harga_modal nullable with copy-on-null | Task 6 |
-| Both prices nil → validation error | Task 6 |
-| Cashier stock visibility (already works) | no task needed |
+| Spec requirement | Plan task |
+|---|---|
+| SKU nullable | Task 1 verification |
+| Migration 015 | Task 1 verification |
+| Tenant terms_of_service field | Task 1 verification |
+| Migration 016 | Task 1 verification |
+| Cashier can update discount campaign | Task 1 verification |
+| Admin-only product delete endpoint | Task 1 verification, Task 5 smoke check |
+| Migration 017 | Task 1 verification |
+| Nullable price fields on create | Task 1 verification |
+| Copy-on-null for update | Task 2 |
+| Both prices nil returns validation error | Task 2, Task 3, Task 5 |
+| Frontend/API consumer guidance | Task 4 |
+
+---
+
+## Out Of Scope
+
+- No schema changes beyond the three migrations already present
+- No router or RBAC changes beyond verifying existing behavior
+- No retroactive data cleanup for legacy rows with null prices unless a new requirement appears
+- No new role or permission model beyond `admin` and `cashier`

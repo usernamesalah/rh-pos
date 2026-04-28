@@ -4,7 +4,6 @@ import (
 	"time"
 )
 
-// Transaction represents a sales transaction
 type Transaction struct {
 	ID            uint              `json:"id" gorm:"primaryKey"`
 	Items         []TransactionItem `json:"items" gorm:"foreignKey:TransactionID"`
@@ -23,7 +22,6 @@ type Transaction struct {
 	Notes         string            `json:"notes,omitempty" gorm:"type:text"`
 }
 
-// TransactionItem represents an item in a transaction
 type TransactionItem struct {
 	ID                 uint      `json:"id" gorm:"primaryKey"`
 	TransactionID      uint      `json:"transaction_id" gorm:"not null"`
@@ -33,19 +31,19 @@ type TransactionItem struct {
 	Price              float64   `json:"price" gorm:"not null"`
 	WarrantyDays       int       `json:"warranty_days" gorm:"default:0"`
 	DiscountPercentage float64   `json:"discount_percentage" gorm:"default:0"`
+	DiscountAmount     float64   `json:"discount_amount" gorm:"default:0"`
 	CampaignID         *uint     `json:"campaign_id,omitempty"`
+	CampaignType       string    `json:"campaign_type,omitempty"`
+	IsFreeItem         bool      `json:"is_free_item" gorm:"default:false"`
+	CampaignGroupKey   string    `json:"campaign_group_key,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
-// TableName sets the table name for GORM
 func (Transaction) TableName() string {
 	return "transactions"
 }
 
-// TableName sets the table name for GORM
 func (TransactionItem) TableName() string {
 	return "transaction_items"
 }
-
-// Add a migration to add the 'notes' column to the transactions table if not present.

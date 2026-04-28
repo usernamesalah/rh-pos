@@ -41,7 +41,6 @@ type TransactionRepository interface {
 	Delete(ctx context.Context, id uint) error
 }
 
-// DiscountCampaignRepository defines the interface for discount campaign data operations
 type DiscountCampaignRepository interface {
 	Create(ctx context.Context, campaign *entities.DiscountCampaign) error
 	GetByID(ctx context.Context, id uint) (*entities.DiscountCampaign, error)
@@ -51,6 +50,7 @@ type DiscountCampaignRepository interface {
 	AddProducts(ctx context.Context, campaignID uint, productIDs []uint) error
 	RemoveProduct(ctx context.Context, campaignID uint, productID uint) error
 	GetActiveCampaignsForProduct(ctx context.Context, productID uint) ([]entities.DiscountCampaign, error)
+	GetActiveCampaignsForProducts(ctx context.Context, productIDs []uint) ([]entities.DiscountCampaign, error)
 }
 
 // AuditLogRepository defines the interface for audit log data operations
