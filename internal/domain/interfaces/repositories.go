@@ -34,7 +34,7 @@ type TransactionRepository interface {
 	GetByID(ctx context.Context, id uint) (*entities.Transaction, error)
 	GetByIDWithoutTenant(ctx context.Context, id uint) (*entities.Transaction, error)
 	SearchByPhone(ctx context.Context, phone string) ([]entities.Transaction, error)
-	List(ctx context.Context, page, limit int) ([]entities.Transaction, int64, error)
+	List(ctx context.Context, page, limit int, startDate, endDate *time.Time, search string) ([]entities.Transaction, int64, error)
 	GetReportData(ctx context.Context, startDate, endDate time.Time) ([]ReportDetail, error)
 	GetTransactionCount(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	Update(ctx context.Context, transaction *entities.Transaction) error

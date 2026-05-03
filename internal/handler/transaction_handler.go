@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
@@ -122,6 +123,9 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 // @Security bearerAuth
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(10)
+// @Param start_date query string false "Start date (YYYY-MM-DD)"
+// @Param end_date query string false "End date (YYYY-MM-DD)"
+// @Param search query string false "Search by transaction ID, product name, or cashier"
 // @Success 200 {object} Response{data=[]HashIDResponse}
 // @Failure 401 {object} Response
 // @Router /api/transactions [get]
@@ -138,7 +142,26 @@ func (h *TransactionHandler) ListTransactions(c echo.Context) error {
 		limit = 10
 	}
 
-	transactions, total, err := h.transactionService.ListTransactions(ctx, page, limit)
+	search := c.QueryParam("search")
+
+	var startDate, endDate *time.Time
+	startDateStr := c.QueryParam("start_date")
+	endDateStr := c.QueryParam("end_date")
+
+	if startDateStr != "" && endDateStr != "" {
+		start, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid start_date format, use YYYY-MM-DD")
+		}
+		end, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid end_date format, use YYYY-MM-DD")
+		}
+		startDate = &start
+		endDate = &end
+	}
+
+	transactions, total, err := h.transactionService.ListTransactions(ctx, page, limit, startDate, endDate, search)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to list transactions", "error", err)
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to list transactions")

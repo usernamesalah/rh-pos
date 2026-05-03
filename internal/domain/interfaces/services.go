@@ -40,7 +40,7 @@ type ProductService interface {
 type TransactionService interface {
 	CreateTransaction(ctx context.Context, req CreateTransactionRequest) (*entities.Transaction, error)
 	GetTransaction(ctx context.Context, id uint) (*entities.Transaction, error)
-	ListTransactions(ctx context.Context, page, limit int) ([]entities.Transaction, int64, error)
+	ListTransactions(ctx context.Context, page, limit int, startDate, endDate *time.Time, search string) ([]entities.Transaction, int64, error)
 }
 
 // DiscountCampaignService defines discount campaign business operations

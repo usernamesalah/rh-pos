@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/usernamesalah/rh-pos/internal/domain/entities"
 	"github.com/usernamesalah/rh-pos/internal/domain/interfaces"
@@ -164,10 +165,9 @@ func (s *transactionService) GetTransaction(ctx context.Context, id uint) (*enti
 }
 
 // ListTransactions retrieves transactions with pagination
-func (s *transactionService) ListTransactions(ctx context.Context, page, limit int) ([]entities.Transaction, int64, error) {
-	s.logger.InfoContext(ctx, "listing transactions", "page", page, "limit", limit)
+func (s *transactionService) ListTransactions(ctx context.Context, page, limit int, startDate, endDate *time.Time, search string) ([]entities.Transaction, int64, error) {
+	s.logger.InfoContext(ctx, "listing transactions", "page", page, "limit", limit, "start_date", startDate, "end_date", endDate, "search", search)
 
-	// Validate pagination parameters
 	if page < 1 {
 		page = 1
 	}
@@ -175,7 +175,7 @@ func (s *transactionService) ListTransactions(ctx context.Context, page, limit i
 		limit = 10
 	}
 
-	transactions, total, err := s.transactionRepo.List(ctx, page, limit)
+	transactions, total, err := s.transactionRepo.List(ctx, page, limit, startDate, endDate, search)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list transactions: %w", err)
 	}
