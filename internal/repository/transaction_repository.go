@@ -71,29 +71,40 @@ func (r *transactionRepository) List(ctx context.Context, page, limit int, start
 	var transactions []entities.Transaction
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&entities.Transaction{}).Where("tenant_id = ?", tenantID)
+	baseQuery := r.db.WithContext(ctx).Model(&entities.Transaction{}).Where("tenant_id = ?", tenantID)
 
 	if startDate != nil && endDate != nil {
 		endDateWithTime := endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-		query = query.Where("created_at BETWEEN ? AND ?", startDate, endDateWithTime)
+		baseQuery = baseQuery.Where("created_at BETWEEN ? AND ?", startDate, endDateWithTime)
 	}
 
 	if search != "" {
 		searchPattern := "%" + search + "%"
-		query = query.Joins("LEFT JOIN users ON users.id = transactions.user_id").
+		subQuery := r.db.WithContext(ctx).
+			Table("transactions").
+			Select("transactions.id").
+			Joins("LEFT JOIN users ON users.id = transactions.user_id").
 			Joins("LEFT JOIN transaction_items ON transaction_items.transaction_id = transactions.id").
 			Joins("LEFT JOIN products ON products.id = transaction_items.product_id").
+			Where("transactions.tenant_id = ?", tenantID).
 			Where("transactions.id LIKE ? OR users.username LIKE ? OR products.name LIKE ?", searchPattern, searchPattern, searchPattern)
+
+		if startDate != nil && endDate != nil {
+			endDateWithTime := endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+			subQuery = subQuery.Where("transactions.created_at BETWEEN ? AND ?", startDate, endDateWithTime)
+		}
+
+		subQuery = subQuery.Group("transactions.id")
+		baseQuery = baseQuery.Where("transactions.id IN (?)", subQuery)
 	}
 
-	if err := query.Distinct("transactions.id").Count(&total).Error; err != nil {
+	if err := baseQuery.Count(&total).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to count transactions", "error", err)
 		return nil, 0, fmt.Errorf("failed to count transactions: %w", err)
 	}
 
 	offset := (page - 1) * limit
-	query = query.Preload("Items.Product").Preload("User").Distinct("transactions.id").Offset(offset).Limit(limit).Order("transactions.created_at DESC")
-	if err := query.Find(&transactions).Error; err != nil {
+	if err := baseQuery.Preload("Items.Product").Preload("User").Order("created_at DESC").Offset(offset).Limit(limit).Find(&transactions).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to list transactions", "error", err)
 		return nil, 0, fmt.Errorf("failed to list transactions: %w", err)
 	}
