@@ -23,7 +23,7 @@ type AuthService interface {
 // ProductService defines product business operations
 type ProductService interface {
 	GetProduct(ctx context.Context, id uint) (*entities.Product, error)
-	ListProducts(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error)
+	ListProducts(ctx context.Context, page, limit int, search string, categoryID *uint) ([]entities.Product, int64, error)
 	UpdateProduct(ctx context.Context, id uint, updates map[string]interface{}) (*entities.Product, error)
 	UpdateStock(ctx context.Context, id uint, stock int) (*entities.Product, error)
 	CreateProduct(ctx context.Context, product *entities.Product) error
@@ -34,6 +34,15 @@ type ProductService interface {
 	GetProductUploadURL(ctx context.Context, product *entities.Product, ext string) (uploadURL string, imageKey string, err error)
 	UploadProductImage(ctx context.Context, productID uint, fileData []byte, contentType string) (*entities.Product, error)
 	GetProductImageBytes(ctx context.Context, productID uint) ([]byte, string, error)
+}
+
+// CategoryService defines category business operations
+type CategoryService interface {
+	CreateCategory(ctx context.Context, category *entities.Category) error
+	GetCategory(ctx context.Context, id uint) (*entities.Category, error)
+	ListCategories(ctx context.Context, page, limit int) ([]entities.Category, int64, error)
+	UpdateCategory(ctx context.Context, id uint, name string) (*entities.Category, error)
+	DeleteCategory(ctx context.Context, id uint) error
 }
 
 // TransactionService defines transaction business operations

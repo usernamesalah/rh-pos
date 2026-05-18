@@ -35,6 +35,7 @@ type UpdateProductRequest struct {
 	SKU        *string  `json:"sku,omitempty"`
 	HargaModal *float64 `json:"harga_modal,omitempty"`
 	HargaJual  *float64 `json:"harga_jual,omitempty"`
+	CategoryID *string  `json:"category_id,omitempty"` // hashed ID; empty string = unset category
 }
 
 // UpdateStockRequest represents the update stock request
@@ -50,6 +51,7 @@ type CreateProductRequest struct {
 	HargaModal *float64 `json:"harga_modal,omitempty"`
 	HargaJual  *float64 `json:"harga_jual,omitempty"`
 	Stock      int      `json:"stock" validate:"min=0"`
+	CategoryID *string  `json:"category_id,omitempty"` // hashed ID
 }
 
 // GetUploadURLRequest represents the request for getting an upload URL
@@ -83,7 +85,16 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 
 	search := c.QueryParam("search")
 
-	products, total, err := h.productService.ListProducts(ctx, page, limit, search)
+	var categoryID *uint
+	if catHashedID := c.QueryParam("category_id"); catHashedID != "" {
+		catID, err := hash.DecodeHashID(catHashedID)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid category_id format")
+		}
+		categoryID = &catID
+	}
+
+	products, total, err := h.productService.ListProducts(ctx, page, limit, search, categoryID)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to list products", "error", err)
 		return ErrorResponse(c, http.StatusInternalServerError, "Failed to list products")
@@ -112,6 +123,7 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 				"harga_modal": p.HargaModal,
 				"harga_jual":  p.HargaJual,
 				"stock":       p.Stock,
+				"category_id": categoryHashedID(p.CategoryID),
 			},
 		)
 	}
@@ -177,6 +189,7 @@ func (h *ProductHandler) GetProduct(c echo.Context) error {
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
+			"category_id": categoryHashedID(product.CategoryID),
 		},
 	)
 
@@ -229,6 +242,17 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 	if req.HargaJual != nil {
 		updates["harga_jual"] = *req.HargaJual
 	}
+	if req.CategoryID != nil {
+		if *req.CategoryID == "" {
+			updates["CategoryID"] = nil
+		} else {
+			catID, err := hash.DecodeHashID(*req.CategoryID)
+			if err != nil {
+				return ErrorResponse(c, http.StatusBadRequest, "Invalid category_id format")
+			}
+			updates["CategoryID"] = catID
+		}
+	}
 
 	product, err := h.productService.UpdateProduct(ctx, id, updates)
 	if err != nil {
@@ -256,6 +280,7 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
+			"category_id": categoryHashedID(product.CategoryID),
 		},
 	)
 
@@ -358,6 +383,15 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, "Validation failed")
 	}
 
+	var categoryID *uint
+	if req.CategoryID != nil && *req.CategoryID != "" {
+		catID, err := hash.DecodeHashID(*req.CategoryID)
+		if err != nil {
+			return ErrorResponse(c, http.StatusBadRequest, "Invalid category_id format")
+		}
+		categoryID = &catID
+	}
+
 	product := &entities.Product{
 		Name:       req.Name,
 		SKU:        req.SKU,
@@ -365,6 +399,7 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 		HargaModal: req.HargaModal,
 		HargaJual:  req.HargaJual,
 		Stock:      req.Stock,
+		CategoryID: categoryID,
 	}
 
 	// Set tenant_id from context
@@ -388,6 +423,7 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 			"harga_modal": product.HargaModal,
 			"harga_jual":  product.HargaJual,
 			"stock":       product.Stock,
+			"category_id": categoryHashedID(product.CategoryID),
 		},
 	)
 
@@ -615,4 +651,12 @@ func (h *ProductHandler) GetProductImageBytes(c echo.Context) error {
 
 	// Write image bytes to response
 	return c.Blob(http.StatusOK, contentType, imageBytes)
+}
+
+// categoryHashedID encodes a nullable category ID to a hashed string for API responses.
+func categoryHashedID(id *uint) interface{} {
+	if id == nil {
+		return nil
+	}
+	return hash.HashID(*id)
 }

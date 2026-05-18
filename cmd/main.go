@@ -87,6 +87,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	tenantRepo := repository.NewTenantRepository(db, appLogger)
 	campaignRepo := repository.NewDiscountCampaignRepository(db, appLogger)
 	auditLogRepo := repository.NewAuditLogRepository(db, appLogger)
+	categoryRepo := repository.NewCategoryRepository(db, appLogger)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
@@ -105,6 +106,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	tenantUseCase := usecase.NewTenantService(tenantRepo, storageClient, storageBaseURL, appLogger)
 	campaignUseCase := usecase.NewDiscountCampaignService(campaignRepo, auditLogRepo, appLogger)
 	warrantyUseCase := usecase.NewWarrantyService(transactionRepo, appLogger)
+	categoryUseCase := usecase.NewCategoryService(categoryRepo, appLogger)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authUseCase, tenantUseCase, appLogger)
@@ -114,6 +116,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 	adminHandler := handler.NewAdminHandler(tenantUseCase, authUseCase)
 	campaignHandler := handler.NewDiscountCampaignHandler(campaignUseCase, appLogger)
 	warrantyHandler := handler.NewWarrantyHandler(warrantyUseCase, appLogger)
+	categoryHandler := handler.NewCategoryHandler(categoryUseCase, appLogger)
 
 	// Setup router
 	e := server.SetupRouter(
@@ -125,6 +128,7 @@ func run(cfg *config.Config, appLogger *slog.Logger) error {
 		adminHandler,
 		campaignHandler,
 		warrantyHandler,
+		categoryHandler,
 	)
 
 	// Start server

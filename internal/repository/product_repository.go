@@ -93,7 +93,7 @@ func (r *productRepository) GetByID(ctx context.Context, id uint) (*entities.Pro
 }
 
 // List retrieves all products with pagination and optional search
-func (r *productRepository) List(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error) {
+func (r *productRepository) List(ctx context.Context, page, limit int, search string, categoryID *uint) ([]entities.Product, int64, error) {
 	r.logger.InfoContext(ctx, "listing products", "page", page, "limit", limit, "search", search)
 
 	tenantID, ok := ctxkey.TenantIDFromContext(ctx)
@@ -109,6 +109,10 @@ func (r *productRepository) List(ctx context.Context, page, limit int, search st
 	if search != "" {
 		searchPattern := "%" + search + "%"
 		query = query.Where("name LIKE ?", searchPattern)
+	}
+
+	if categoryID != nil {
+		query = query.Where("category_id = ?", *categoryID)
 	}
 
 	if err := query.Count(&total).Error; err != nil {

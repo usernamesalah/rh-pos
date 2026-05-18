@@ -38,6 +38,7 @@ func SetupRouter(
 	adminHandler *handler.AdminHandler,
 	campaignHandler *handler.DiscountCampaignHandler,
 	warrantyHandler *handler.WarrantyHandler,
+	categoryHandler *handler.CategoryHandler,
 ) *echo.Echo {
 	e := echo.New()
 
@@ -150,6 +151,14 @@ func SetupRouter(
 	products.DELETE("/:id", productHandler.DeleteProduct, adminMiddleware.AdminOnly)
 	products.POST("/:id/upload-url", productHandler.GetUploadURL, adminMiddleware.AdminOnly)
 	products.POST("/:id/image", productHandler.UploadProductImage, adminMiddleware.AdminOnly)
+
+	// Category routes — read for all authenticated, write for admin only
+	categories := api.Group("/categories")
+	categories.GET("", categoryHandler.ListCategories)
+	categories.GET("/:id", categoryHandler.GetCategory)
+	categories.POST("", categoryHandler.CreateCategory, adminMiddleware.AdminOnly)
+	categories.PUT("/:id", categoryHandler.UpdateCategory, adminMiddleware.AdminOnly)
+	categories.DELETE("/:id", categoryHandler.DeleteCategory, adminMiddleware.AdminOnly)
 
 	// Transaction routes — cashier and admin
 	transactions := api.Group("/transactions")

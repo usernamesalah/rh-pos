@@ -20,11 +20,20 @@ type UserRepository interface {
 // ProductRepository defines the interface for product data operations
 type ProductRepository interface {
 	GetByID(ctx context.Context, id uint) (*entities.Product, error)
-	List(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error)
+	List(ctx context.Context, page, limit int, search string, categoryID *uint) ([]entities.Product, int64, error)
 	Update(ctx context.Context, product *entities.Product) error
 	UpdateStock(ctx context.Context, id uint, stock int) error
 	Create(ctx context.Context, product *entities.Product) error
 	GetBySKU(ctx context.Context, sku string) (*entities.Product, error)
+	Delete(ctx context.Context, id uint) error
+}
+
+// CategoryRepository defines the interface for category data operations
+type CategoryRepository interface {
+	Create(ctx context.Context, category *entities.Category) error
+	GetByID(ctx context.Context, id uint) (*entities.Category, error)
+	List(ctx context.Context, page, limit int) ([]entities.Category, int64, error)
+	Update(ctx context.Context, category *entities.Category) error
 	Delete(ctx context.Context, id uint) error
 }
 

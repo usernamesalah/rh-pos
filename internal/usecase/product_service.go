@@ -44,7 +44,7 @@ func (s *productService) GetProduct(ctx context.Context, id uint) (*entities.Pro
 }
 
 // ListProducts retrieves products with pagination and optional search
-func (s *productService) ListProducts(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error) {
+func (s *productService) ListProducts(ctx context.Context, page, limit int, search string, categoryID *uint) ([]entities.Product, int64, error) {
 	s.logger.InfoContext(ctx, "listing products", "page", page, "limit", limit, "search", search)
 
 	// Validate pagination parameters
@@ -55,7 +55,7 @@ func (s *productService) ListProducts(ctx context.Context, page, limit int, sear
 		limit = 10
 	}
 
-	products, total, err := s.productRepo.List(ctx, page, limit, search)
+	products, total, err := s.productRepo.List(ctx, page, limit, search, categoryID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list products: %w", err)
 	}

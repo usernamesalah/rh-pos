@@ -54,7 +54,7 @@ func (m *mockProductRepo) GetBySKU(ctx context.Context, sku string) (*entities.P
 	return p, nil
 }
 
-func (m *mockProductRepo) List(ctx context.Context, page, limit int, search string) ([]entities.Product, int64, error) {
+func (m *mockProductRepo) List(ctx context.Context, page, limit int, search string, categoryID *uint) ([]entities.Product, int64, error) {
 	return nil, 0, nil
 }
 
