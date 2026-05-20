@@ -151,16 +151,18 @@ func (s *productService) CreateProduct(ctx context.Context, product *entities.Pr
 		}
 	}
 
-	// Normalize prices: if one is nil, copy the other; both nil is invalid
-	switch {
-	case product.HargaJual != nil && product.HargaModal == nil:
-		v := *product.HargaJual
-		product.HargaModal = &v
-	case product.HargaModal != nil && product.HargaJual == nil:
-		v := *product.HargaModal
-		product.HargaJual = &v
-	case product.HargaJual == nil && product.HargaModal == nil:
-		return fmt.Errorf("at least one of harga_jual or harga_modal must be provided")
+	// Dynamic price products don't require harga_jual/harga_modal
+	if !product.IsDynamicPrice {
+		switch {
+		case product.HargaJual != nil && product.HargaModal == nil:
+			v := *product.HargaJual
+			product.HargaModal = &v
+		case product.HargaModal != nil && product.HargaJual == nil:
+			v := *product.HargaModal
+			product.HargaJual = &v
+		case product.HargaJual == nil && product.HargaModal == nil:
+			return fmt.Errorf("at least one of harga_jual or harga_modal must be provided")
+		}
 	}
 
 	// Create product
