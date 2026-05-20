@@ -119,13 +119,14 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 			p.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			map[string]interface{}{
-				"name":        p.Name,
-				"sku":         p.SKU,
-				"image_url":   imageURL,
-				"harga_modal": p.HargaModal,
-				"harga_jual":  p.HargaJual,
-				"stock":       p.Stock,
-				"category_id": categoryHashedID(p.CategoryID),
+				"name":             p.Name,
+				"sku":              p.SKU,
+				"image_url":        imageURL,
+				"harga_modal":      p.HargaModal,
+				"harga_jual":       p.HargaJual,
+				"stock":            p.Stock,
+				"category_id":      categoryHashedID(p.CategoryID),
+				"is_dynamic_price": p.IsDynamicPrice,
 			},
 		)
 	}
@@ -185,13 +186,14 @@ func (h *ProductHandler) GetProduct(c echo.Context) error {
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		product.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		map[string]interface{}{
-			"name":        product.Name,
-			"sku":         product.SKU,
-			"image_url":   imageURL,
-			"harga_modal": product.HargaModal,
-			"harga_jual":  product.HargaJual,
-			"stock":       product.Stock,
-			"category_id": categoryHashedID(product.CategoryID),
+			"name":             product.Name,
+			"sku":              product.SKU,
+			"image_url":        imageURL,
+			"harga_modal":      product.HargaModal,
+			"harga_jual":       product.HargaJual,
+			"stock":            product.Stock,
+			"category_id":      categoryHashedID(product.CategoryID),
+			"is_dynamic_price": product.IsDynamicPrice,
 		},
 	)
 
