@@ -41,9 +41,10 @@ type CreateTransactionRequest struct {
 
 // TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID    string `json:"product_id" validate:"required"`
-	Quantity     int    `json:"quantity" validate:"required,min=1"`
-	WarrantyDays int    `json:"warranty_days"`
+	ProductID    string   `json:"product_id" validate:"required"`
+	Quantity     int      `json:"quantity" validate:"required,min=1"`
+	WarrantyDays int      `json:"warranty_days"`
+	Price        *float64 `json:"price"`
 }
 
 // CreateTransaction handles creating a new transaction
@@ -103,6 +104,7 @@ func (h *TransactionHandler) CreateTransaction(c echo.Context) error {
 			ProductID:    productID,
 			Quantity:     item.Quantity,
 			WarrantyDays: item.WarrantyDays,
+			Price:        item.Price,
 		}
 	}
 
