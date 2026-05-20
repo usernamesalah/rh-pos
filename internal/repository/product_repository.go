@@ -138,7 +138,9 @@ func (r *productRepository) Update(ctx context.Context, product *entities.Produc
 		return fmt.Errorf("tenant_id not found in context")
 	}
 
-	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", product.ID, tenantID).Save(product).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", product.ID, tenantID).
+		Select("Image", "Name", "SKU", "HargaModal", "HargaJual", "Stock", "IsDynamicPrice", "CategoryID", "UpdatedAt").
+		Updates(product).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to update product", "error", err, "id", product.ID)
 		return fmt.Errorf("failed to update product: %w", err)
 	}

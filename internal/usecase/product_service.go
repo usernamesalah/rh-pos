@@ -94,6 +94,16 @@ func (s *productService) UpdateProduct(ctx context.Context, id uint, updates map
 			}
 		case "stock":
 			product.Stock = value.(int)
+		case "CategoryID":
+			if v, ok := value.(uint); ok {
+				product.CategoryID = &v
+			} else {
+				product.CategoryID = nil
+			}
+		case "is_dynamic_price":
+			if v, ok := value.(bool); ok {
+				product.IsDynamicPrice = v
+			}
 		}
 	}
 
