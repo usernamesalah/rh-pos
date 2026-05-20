@@ -74,6 +74,12 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 				return fmt.Errorf("product not found: %w", err)
 			}
 
+			// If dynamic price product but no price provided, use 0
+			if product.IsDynamicPrice && item.Price == nil {
+				defaultPrice := 0.0
+				item.Price = &defaultPrice
+			}
+
 			itemPrice := ResolveItemPrice(product, item.Price)
 
 			transactionItem := entities.TransactionItem{
@@ -129,10 +135,15 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 			regularTotal = regularTotal * (1 - transaction.Discount/100)
 		}
 
-		calculatedTotal := campaignDiscountedTotal + regularTotal
+calculatedTotal := campaignDiscountedTotal + regularTotal
 
-		// Set the server-calculated total price (authoritative)
+		// Use user-provided total_price if > 0, otherwise use calculated total
+	// This supports dynamic price products where price comes from user input
+	if req.TotalPrice > 0 {
+		transaction.TotalPrice = req.TotalPrice
+	} else {
 		transaction.TotalPrice = calculatedTotal
+	}
 
 		// Create transaction within the DB transaction
 		if err := tx.Create(transaction).Error; err != nil {

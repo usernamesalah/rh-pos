@@ -126,6 +126,7 @@ func (h *ProductHandler) ListProducts(c echo.Context) error {
 				"harga_jual":       p.HargaJual,
 				"stock":            p.Stock,
 				"category_id":      categoryHashedID(p.CategoryID),
+				"category_name":    categoryName(&p),
 				"is_dynamic_price": p.IsDynamicPrice,
 			},
 		)
@@ -193,6 +194,7 @@ func (h *ProductHandler) GetProduct(c echo.Context) error {
 			"harga_jual":       product.HargaJual,
 			"stock":            product.Stock,
 			"category_id":      categoryHashedID(product.CategoryID),
+			"category_name":    categoryName(product),
 			"is_dynamic_price": product.IsDynamicPrice,
 		},
 	)
@@ -288,6 +290,7 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 			"harga_jual":       product.HargaJual,
 			"stock":            product.Stock,
 			"category_id":      categoryHashedID(product.CategoryID),
+			"category_name":    categoryName(product),
 			"is_dynamic_price": product.IsDynamicPrice,
 		},
 	)
@@ -669,4 +672,12 @@ func categoryHashedID(id *uint) interface{} {
 		return nil
 	}
 	return hash.HashID(*id)
+}
+
+// categoryName extracts the category name from a preloaded product category.
+func categoryName(p *entities.Product) interface{} {
+	if p.Category == nil {
+		return nil
+	}
+	return p.Category.Name
 }
