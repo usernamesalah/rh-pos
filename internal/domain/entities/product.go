@@ -12,8 +12,9 @@ type Product struct {
 	SKU        *string   `json:"sku" gorm:"uniqueIndex:idx_tenant_sku"`
 	HargaModal *float64  `json:"harga_modal"`
 	HargaJual  *float64  `json:"harga_jual"`
-	Stock      int       `json:"stock" gorm:"not null;default:0"`
-	TenantID   *uint     `json:"tenant_id" gorm:"uniqueIndex:idx_tenant_sku;index"`
+	Stock          int       `json:"stock" gorm:"not null;default:0"`
+	IsDynamicPrice bool      `json:"is_dynamic_price" gorm:"default:false"`
+	TenantID       *uint     `json:"tenant_id" gorm:"uniqueIndex:idx_tenant_sku;index"`
 	Tenant     *Tenant   `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
 	CategoryID *uint     `json:"category_id" gorm:"index"`
 	Category   *Category `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
