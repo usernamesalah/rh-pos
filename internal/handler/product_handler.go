@@ -31,11 +31,12 @@ func NewProductHandler(productService interfaces.ProductService, logger *slog.Lo
 
 // UpdateProductRequest represents the update product request
 type UpdateProductRequest struct {
-	Name       *string  `json:"name,omitempty"`
-	SKU        *string  `json:"sku,omitempty"`
-	HargaModal *float64 `json:"harga_modal,omitempty"`
-	HargaJual  *float64 `json:"harga_jual,omitempty"`
-	CategoryID *string  `json:"category_id,omitempty"` // hashed ID; empty string = unset category
+	Name           *string  `json:"name,omitempty"`
+	SKU            *string  `json:"sku,omitempty"`
+	HargaModal     *float64 `json:"harga_modal,omitempty"`
+	HargaJual      *float64 `json:"harga_jual,omitempty"`
+	CategoryID     *string  `json:"category_id,omitempty"` // hashed ID; empty string = unset category
+	IsDynamicPrice *bool    `json:"is_dynamic_price,omitempty"`
 }
 
 // UpdateStockRequest represents the update stock request
@@ -45,13 +46,14 @@ type UpdateStockRequest struct {
 
 // CreateProductRequest represents the create product request
 type CreateProductRequest struct {
-	Name       string   `json:"name" validate:"required"`
-	SKU        *string  `json:"sku,omitempty"`
-	Image      string   `json:"image,omitempty"`
-	HargaModal *float64 `json:"harga_modal,omitempty"`
-	HargaJual  *float64 `json:"harga_jual,omitempty"`
-	Stock      int      `json:"stock" validate:"min=0"`
-	CategoryID *string  `json:"category_id,omitempty"` // hashed ID
+	Name           string   `json:"name" validate:"required"`
+	SKU            *string  `json:"sku,omitempty"`
+	Image          string   `json:"image,omitempty"`
+	HargaModal     *float64 `json:"harga_modal,omitempty"`
+	HargaJual      *float64 `json:"harga_jual,omitempty"`
+	Stock          int      `json:"stock" validate:"min=0"`
+	CategoryID     *string  `json:"category_id,omitempty"` // hashed ID
+	IsDynamicPrice bool     `json:"is_dynamic_price"`
 }
 
 // GetUploadURLRequest represents the request for getting an upload URL
@@ -253,6 +255,9 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 			updates["CategoryID"] = catID
 		}
 	}
+	if req.IsDynamicPrice != nil {
+		updates["is_dynamic_price"] = *req.IsDynamicPrice
+	}
 
 	product, err := h.productService.UpdateProduct(ctx, id, updates)
 	if err != nil {
@@ -274,13 +279,14 @@ func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		product.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		map[string]interface{}{
-			"name":        product.Name,
-			"sku":         product.SKU,
-			"image_url":   imageURL,
-			"harga_modal": product.HargaModal,
-			"harga_jual":  product.HargaJual,
-			"stock":       product.Stock,
-			"category_id": categoryHashedID(product.CategoryID),
+			"name":             product.Name,
+			"sku":              product.SKU,
+			"image_url":        imageURL,
+			"harga_modal":      product.HargaModal,
+			"harga_jual":       product.HargaJual,
+			"stock":            product.Stock,
+			"category_id":      categoryHashedID(product.CategoryID),
+			"is_dynamic_price": product.IsDynamicPrice,
 		},
 	)
 
@@ -393,13 +399,14 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 	}
 
 	product := &entities.Product{
-		Name:       req.Name,
-		SKU:        req.SKU,
-		Image:      req.Image,
-		HargaModal: req.HargaModal,
-		HargaJual:  req.HargaJual,
-		Stock:      req.Stock,
-		CategoryID: categoryID,
+		Name:           req.Name,
+		SKU:            req.SKU,
+		Image:          req.Image,
+		HargaModal:     req.HargaModal,
+		HargaJual:      req.HargaJual,
+		Stock:          req.Stock,
+		CategoryID:     categoryID,
+		IsDynamicPrice: req.IsDynamicPrice,
 	}
 
 	// Set tenant_id from context
@@ -417,13 +424,14 @@ func (h *ProductHandler) CreateProduct(c echo.Context) error {
 		product.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		product.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		map[string]interface{}{
-			"name":        product.Name,
-			"sku":         product.SKU,
-			"image":       product.Image,
-			"harga_modal": product.HargaModal,
-			"harga_jual":  product.HargaJual,
-			"stock":       product.Stock,
-			"category_id": categoryHashedID(product.CategoryID),
+			"name":             product.Name,
+			"sku":              product.SKU,
+			"image":            product.Image,
+			"harga_modal":      product.HargaModal,
+			"harga_jual":       product.HargaJual,
+			"stock":            product.Stock,
+			"category_id":      categoryHashedID(product.CategoryID),
+			"is_dynamic_price": product.IsDynamicPrice,
 		},
 	)
 
