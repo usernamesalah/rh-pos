@@ -69,59 +69,59 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 
 		// Process each item
 		for _, item := range req.Items {
-			// Read product for price and name — stock check is done atomically below
 			product, err := s.productRepo.GetByID(ctx, item.ProductID)
 			if err != nil {
 				return fmt.Errorf("product not found: %w", err)
 			}
 
-			var hargaJual float64
-			if product.HargaJual != nil {
-				hargaJual = *product.HargaJual
-			}
+			itemPrice := ResolveItemPrice(product, item.Price)
 
 			transactionItem := entities.TransactionItem{
 				ProductID:    item.ProductID,
 				Quantity:     item.Quantity,
 				WarrantyDays: item.WarrantyDays,
-				Price:        hargaJual,
+				Price:        itemPrice,
 			}
 
-			// Check for active campaign discount
-			campaigns, err := s.campaignRepo.GetActiveCampaignsForProduct(ctx, item.ProductID)
-			if err != nil {
-				return fmt.Errorf("failed to check campaigns for product: %w", err)
-			}
-
-			if len(campaigns) > 0 {
-				// Use highest discount percentage
-				best := campaigns[0]
-				for _, c := range campaigns[1:] {
-					if c.DiscountPercentage > best.DiscountPercentage {
-						best = c
-					}
-				}
-				discountedPrice := hargaJual * (1 - best.DiscountPercentage/100)
-				transactionItem.Price = discountedPrice
-				transactionItem.DiscountPercentage = best.DiscountPercentage
-				transactionItem.CampaignID = &best.ID
-				campaignDiscountedTotal += discountedPrice * float64(item.Quantity)
+			if product.IsDynamicPrice {
+				// Dynamic price product: no campaign discount, no stock deduction
+				regularTotal += itemPrice * float64(item.Quantity)
 			} else {
-				regularTotal += hargaJual * float64(item.Quantity)
+				// Regular product: check campaigns, deduct stock
+				campaigns, err := s.campaignRepo.GetActiveCampaignsForProduct(ctx, item.ProductID)
+				if err != nil {
+					return fmt.Errorf("failed to check campaigns for product: %w", err)
+				}
+
+				if len(campaigns) > 0 {
+					best := campaigns[0]
+					for _, c := range campaigns[1:] {
+						if c.DiscountPercentage > best.DiscountPercentage {
+							best = c
+						}
+					}
+					discountedPrice := itemPrice * (1 - best.DiscountPercentage/100)
+					transactionItem.Price = discountedPrice
+					transactionItem.DiscountPercentage = best.DiscountPercentage
+					transactionItem.CampaignID = &best.ID
+					campaignDiscountedTotal += discountedPrice * float64(item.Quantity)
+				} else {
+					regularTotal += itemPrice * float64(item.Quantity)
+				}
+
+				// Atomically deduct stock only if sufficient quantity exists
+				result := tx.Model(&entities.Product{}).
+					Where("id = ? AND tenant_id = ? AND stock >= ?", item.ProductID, tenantID, item.Quantity).
+					Update("stock", gorm.Expr("stock - ?", item.Quantity))
+				if result.Error != nil {
+					return fmt.Errorf("failed to update product stock: %w", result.Error)
+				}
+				if result.RowsAffected == 0 {
+					return fmt.Errorf("insufficient stock for product %s", product.Name)
+				}
 			}
 
 			transaction.Items = append(transaction.Items, transactionItem)
-
-			// Atomically deduct stock only if sufficient quantity exists.
-			result := tx.Model(&entities.Product{}).
-				Where("id = ? AND tenant_id = ? AND stock >= ?", item.ProductID, tenantID, item.Quantity).
-				Update("stock", gorm.Expr("stock - ?", item.Quantity))
-			if result.Error != nil {
-				return fmt.Errorf("failed to update product stock: %w", result.Error)
-			}
-			if result.RowsAffected == 0 {
-				return fmt.Errorf("insufficient stock for product %s", product.Name)
-			}
 		}
 
 		// Apply transaction-level discount only to regular (non-campaign) items
@@ -162,6 +162,22 @@ func (s *transactionService) GetTransaction(ctx context.Context, id uint) (*enti
 	}
 
 	return transaction, nil
+}
+
+// ResolveItemPrice returns the price to use for a transaction item.
+// For dynamic price products, uses requestPrice (default 0.0 if nil).
+// For regular products, uses HargaJual (default 0.0 if nil).
+func ResolveItemPrice(product *entities.Product, requestPrice *float64) float64 {
+	if product.IsDynamicPrice {
+		if requestPrice != nil {
+			return *requestPrice
+		}
+		return 0.0
+	}
+	if product.HargaJual != nil {
+		return *product.HargaJual
+	}
+	return 0.0
 }
 
 // ListTransactions retrieves transactions with pagination
