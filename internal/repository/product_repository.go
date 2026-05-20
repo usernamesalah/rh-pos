@@ -61,7 +61,7 @@ func (r *productRepository) GetBySKU(ctx context.Context, sku string) (*entities
 	}
 
 	var product entities.Product
-	if err := r.db.WithContext(ctx).Where("sku = ? AND tenant_id = ?", sku, tenantID).First(&product).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("sku = ? AND tenant_id = ?", sku, tenantID).Preload("Category").First(&product).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("product not found: %w", err)
 		}
@@ -81,7 +81,7 @@ func (r *productRepository) GetByID(ctx context.Context, id uint) (*entities.Pro
 	}
 
 	var product entities.Product
-	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, tenantID).First(&product).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, tenantID).Preload("Category").First(&product).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("product not found: %w", err)
 		}
@@ -121,7 +121,7 @@ func (r *productRepository) List(ctx context.Context, page, limit int, search st
 	}
 
 	offset := (page - 1) * limit
-	if err := query.Offset(offset).Limit(limit).Find(&products).Error; err != nil {
+	if err := query.Preload("Category").Offset(offset).Limit(limit).Find(&products).Error; err != nil {
 		r.logger.ErrorContext(ctx, "failed to list products", "error", err)
 		return nil, 0, fmt.Errorf("failed to list products: %w", err)
 	}

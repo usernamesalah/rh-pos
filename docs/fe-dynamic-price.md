@@ -210,20 +210,52 @@ Product baru bertipe **dynamic price** — harga tidak disimpan di master produc
 
 ---
 
-## 3. UI Behavior yang Perlu Diupdate
+## 3. Implementasi Frontend
 
-### Admin — Form Create/Edit Product
+### 3.1 rhpos-fe (Admin Dashboard)
 
-- Tambah toggle/checkbox **"Harga Dinamis"** (`is_dynamic_price`)
-- Jika `is_dynamic_price = true`: sembunyikan atau disable field `harga_jual`, `harga_modal`, dan `stock`
-- Di list product: tampilkan badge/tag **"Harga Dinamis"** jika `is_dynamic_price = true`
+**File yang diubah:**
 
-### POS — Checkout / Cart
+| File | Perubahan |
+|---|---|
+| `lib/api.ts` | Tambah `is_dynamic_price?: boolean` ke interface `Product` |
+| `app/products/page.tsx` | Toggle checkbox, skip validasi harga, badge "Dinamis" di tabel, pass ke API |
 
-- Saat menambah item ke cart: cek `is_dynamic_price` dari data product
-- Jika `true`: tampilkan input field harga di cart item (opsional, default 0 jika kosong)
-- Jika `false`: tampilkan `harga_jual` seperti biasa, tidak ada input tambahan
-- Kirim `price` dalam payload item hanya untuk dynamic price product
+**Behavior:**
+- Form tambah/edit product: checkbox **"Harga Dinamis"** — jika dicentang, `harga_jual` dan `harga_modal` dikirim `null`, `stock` dikirim `0`
+- Validasi harga (`validatePrices`) diskip jika `is_dynamic_price = true`
+- Tabel product: badge **Dinamis** (orange outline) muncul di kolom nama jika `is_dynamic_price = true`
+- Payload create/update: field `is_dynamic_price` selalu dikirim
+
+---
+
+### 3.2 pos-mobile (Cashier App)
+
+**File yang diubah:**
+
+| File | Perubahan |
+|---|---|
+| `types/index.ts` | Tambah `isDynamicPrice?: boolean` ke `Product` dan `CartItem` |
+| `lib/api/dto.ts` | `RawProduct` terima `is_dynamic_price`, `mapProduct` map ke `isDynamicPrice` |
+| `stores/cart-store.ts` | `add()` set `price: 0` + `isDynamicPrice: true` untuk dynamic product; tambah action `setItemPrice(id, price)` |
+| `components/pos/product-card.tsx` | Dynamic product tampil label **"Harga Dinamis"** (orange) ganti harga; tidak dianggap habis stok |
+| `app/(pos)/cart/page.tsx` | Untuk item `isDynamicPrice`: tampil input harga (orange row) di atas row garansi |
+
+**Behavior cart:**
+- Tap product dinamis → masuk cart dengan `price: 0`
+- Di halaman cart, row input harga muncul di bawah nama item (styling orange)
+- Cashier ketik harga → update via `setItemPrice`
+- Harga terkirim ke server dalam field `price` di payload item transaksi
+
+**Checkout payload untuk dynamic item:**
+```json
+{
+  "product_id": "abc123",
+  "quantity": 1,
+  "warranty_days": 0,
+  "price": 75000
+}
+```
 
 ---
 
@@ -235,3 +267,4 @@ Product baru bertipe **dynamic price** — harga tidak disimpan di master produc
 | Discount campaign | Dynamic price product **tidak** terkena campaign discount |
 | Transaction-level discount | Tetap berlaku — `discount` di level transaksi masih applied ke dynamic price item |
 | `price` untuk regular product | Diabaikan server — aman dikirim, tidak mengubah apapun |
+| Default price | Jika cashier tidak isi harga → dikirim `0` → server catat sebagai gratis |
