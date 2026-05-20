@@ -100,9 +100,10 @@ type CreateTransactionRequest struct {
 
 // TransactionItemRequest represents an item in transaction request
 type TransactionItemRequest struct {
-	ProductID    uint `json:"product_id"`
-	Quantity     int  `json:"quantity"`
-	WarrantyDays int  `json:"warranty_days"`
+	ProductID    uint     `json:"product_id"`
+	Quantity     int      `json:"quantity"`
+	WarrantyDays int      `json:"warranty_days"`
+	Price        *float64 `json:"price"` // used only when product.IsDynamicPrice = true; defaults to 0.0 if nil
 }
 
 // CreateCampaignRequest represents the request to create a discount campaign
