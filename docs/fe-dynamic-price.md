@@ -268,3 +268,4 @@ Product baru bertipe **dynamic price** — harga tidak disimpan di master produc
 | Transaction-level discount | Tetap berlaku — `discount` di level transaksi masih applied ke dynamic price item |
 | `price` untuk regular product | Diabaikan server — aman dikirim, tidak mengubah apapun |
 | Default price | Jika cashier tidak isi harga → dikirim `0` → server catat sebagai gratis |
+| Harga negatif | Jika `price < 0` dikirim untuk dynamic product → server clamp ke `0`, tidak error |
