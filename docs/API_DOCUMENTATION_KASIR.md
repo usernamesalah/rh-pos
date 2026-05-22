@@ -224,9 +224,77 @@ Mendapatkan detail produk berdasarkan ID.
 }
 ```
 
+### GET /api/products/:id/image/bytes
+
+Mengambil gambar produk langsung sebagai binary (tidak perlu presigned URL).
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response (200):** binary image dengan `Content-Type: image/jpeg` (atau sesuai format file). Response header juga menyertakan `Cache-Control: public, max-age=3600`.
+
+**Error:**
+- 404: Product image not found
+
 ---
 
-## 5. Campaign / Promo
+## 5. Category
+
+### GET /api/categories
+
+Mendapatkan daftar kategori produk.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| page | int | 1 | Nomor halaman |
+| limit | int | 10 | Jumlah item per halaman (max 100) |
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Categories retrieved successfully",
+  "data": [
+    {
+      "id": "hashed_category_id",
+      "created_at": "2024-01-10T08:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "name": "Elektronik"
+    }
+  ],
+  "pagination": {
+    "total": 10,
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+
+### GET /api/categories/:id
+
+Mendapatkan detail kategori berdasarkan ID.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Category retrieved successfully",
+  "data": {
+    "id": "hashed_category_id",
+    "created_at": "2024-01-10T08:00:00Z",
+    "updated_at": "2024-01-15T10:00:00Z",
+    "name": "Elektronik"
+  }
+}
+```
+
+---
+
+## 7. Campaign / Promo
 
 ### GET /api/discount-campaigns
 
@@ -382,7 +450,7 @@ Membuat transaksi baru (penjualan).
 
 ---
 
-## 7. Transaction List
+## 8. Transaction List
 
 ### GET /api/transactions
 
@@ -459,7 +527,7 @@ Mendapatkan detail transaksi berdasarkan ID.
 
 ---
 
-## 8. Warranty (Garansi)
+## 9. Warranty (Garansi)
 
 ### GET /warranty/:transaction_id
 
