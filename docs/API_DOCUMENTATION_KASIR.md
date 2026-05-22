@@ -164,6 +164,8 @@ Mendapatkan daftar produk dengan pagination.
 |-----------|------|---------|-------------|
 | page | int | 1 | Nomor halaman |
 | limit | int | 10 | Jumlah item per halaman (max 100) |
+| search | string | - | Filter by nama produk atau SKU |
+| category_id | string | - | Filter by hashed category ID |
 
 **Response (200):**
 ```json
@@ -180,7 +182,10 @@ Mendapatkan daftar produk dengan pagination.
       "image_url": "https://minio.example.com/bucket/products/image.jpg",
       "harga_modal": 5000000,
       "harga_jual": 5500000,
-      "stock": 10
+      "stock": 10,
+      "category_id": "hashed_category_id",
+      "category_name": "Elektronik",
+      "is_dynamic_price": false
     }
   ],
   "pagination": {
@@ -211,7 +216,10 @@ Mendapatkan detail produk berdasarkan ID.
     "image_url": "https://minio.example.com/bucket/products/image.jpg",
     "harga_modal": 5000000,
     "harga_jual": 5500000,
-    "stock": 10
+    "stock": 10,
+    "category_id": "hashed_category_id",
+    "category_name": "Elektronik",
+    "is_dynamic_price": false
   }
 }
 ```
@@ -308,9 +316,10 @@ Membuat transaksi baru (penjualan).
       "warranty_days": 30
     },
     {
-      "product_id": "hashed_product_id_2",
+      "product_id": "hashed_dynamic_product_id",
       "quantity": 1,
-      "warranty_days": 0
+      "warranty_days": 0,
+      "price": 75000
     }
   ],
   "payment_method": "cash",
@@ -326,7 +335,8 @@ Membuat transaksi baru (penjualan).
 **Catatan:**
 - `warranty_days`: optional, jumlah hari garansi untuk item tersebut
 - `payment_method`: bisa `cash`, `transfer`, `qris`, dll
-- `discount`: total diskon yang diterapkan
+- `discount`: total diskon yang diterapkan (persentase)
+- `price`: optional per item — **wajib diisi untuk dynamic price product** (harga diinput cashier). Untuk regular product diabaikan server. Jika negatif, server clamp ke `0`.
 
 **Response (201):**
 ```json
