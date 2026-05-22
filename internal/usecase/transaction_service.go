@@ -80,6 +80,11 @@ func (s *transactionService) CreateTransaction(ctx context.Context, req interfac
 				item.Price = &defaultPrice
 			}
 
+			if product.IsDynamicPrice && item.Price != nil && *item.Price < 0 {
+				zeroPrice := 0.0
+				item.Price = &zeroPrice
+			}
+
 			itemPrice := ResolveItemPrice(product, item.Price)
 
 			transactionItem := entities.TransactionItem{
